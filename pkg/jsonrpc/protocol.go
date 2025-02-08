@@ -76,14 +76,14 @@ func (p *Protocol) Connect(ctx context.Context, transport Transport) error {
 
 	p.transport.SetOnMessage(func(message JSONRPCMessage) {
 		switch message := message.(type) {
-		case *JSONRPCRequest:
-			p.OnRequest(ctx, message, nil)
-		case *JSONRPCResponse:
-			p.onResponse(message, nil)
+		case JSONRPCRequest:
+			p.OnRequest(ctx, &message, nil)
+		case JSONRPCResponse:
+			p.onResponse(&message, nil)
 		case *JSONRPCError:
 			p.onResponse(nil, message)
-		case *JSONRPCNotification:
-			p.onNotification(message)
+		case JSONRPCNotification:
+			p.onNotification(&message)
 		default:
 			p.OnError(fmt.Errorf("unknown message type: %T", message))
 		}
@@ -174,29 +174,35 @@ func (p *Protocol) SendRequestInternal(
 	resChan := make(chan *JSONRPCResponse, 1)
 	errChan := make(chan error, 1)
 
-	select {
-	case <-ctx.Done():
-		fmt.Println("Context is already done before sending request:", ctx.Err())
-		return ctx.Err()
-	default:
-		fmt.Println("Context is not done, proceeding with request")
-	}
-
 	p.responseHandlers[messageID] = func(response *JSONRPCResponse, err error) {
+		if err != nil {
+			errChan <- err
+		} else {
+			// if result != nil && result.AdditionalProperties != nil {
+			// 	// now we know the result type we want, we can unmarshal the additional properties into it.
+			// 	str, err := json.Marshal(response.Result.AdditionalProperties)
+			// 	if err != nil {
+			// 		errChan <- err
+			// 		return
+			// 	}
+			// 	err = json.Unmarshal(str, result.AdditionalProperties)
+			// 	if err != nil {
+			// 		errChan <- err
+			// 		return
+			// 	}
+			// 	response.Result.AdditionalProperties = result.AdditionalProperties
+			// }
+			resChan <- response
+		}
+
 		if cancelTimeout != nil {
 			fmt.Println("Cancelling timeout")
 			cancelTimeout()
 		}
-
-		if err != nil {
-			errChan <- err
-		} else {
-			resChan <- response
-		}
 	}
 
 	cancel := func(reason string) {
-		fmt.Printf("Cancelling request: %s\n", reason)
+		Logger.Printf("Cancelling request: %s\n", reason)
 		delete(p.responseHandlers, messageID)
 
 		if cancelTimeout != nil {
@@ -217,11 +223,12 @@ func (p *Protocol) SendRequestInternal(
 
 	select {
 	case <-ctx.Done():
-		cancel("context done")
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil
+			// return nil
+		} else {
+			cancel("context done")
+			return ctx.Err()
 		}
-		return ctx.Err()
 	case err := <-errChan:
 		if errors.Is(err, context.Canceled) {
 			return nil
@@ -233,6 +240,8 @@ func (p *Protocol) SendRequestInternal(
 	case response := <-resChan:
 		return parseResponse(response, result)
 	}
+
+	return errors.New("Protocol.SendRequestInternal: unexpected state")
 }
 
 // this is a "protected" method for use by jsonrpc/mcp.Protocol.SendRequest() only.
@@ -248,13 +257,13 @@ func (p *Protocol) SendInternal(jsonrpcMessage JSONRPCMessage) error {
 // parseResponse should only be called (and JSONRPCResponse unmarshalled) after verifying that the message is not a JSONRPCError.
 // messageResult _may_ be provided if the result type is known in advance.
 func parseResponse(response *JSONRPCResponse, messageResult *Result) error {
-	content, err := json.Marshal(response.Result)
+	content, err := json.Marshal(response.Result.AdditionalProperties)
 	if err != nil {
 		return err
 	}
 
 	if messageResult != nil {
-		err = json.Unmarshal(content, messageResult)
+		err = json.Unmarshal(content, messageResult.AdditionalProperties)
 		if err != nil {
 			return err
 		}

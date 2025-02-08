@@ -50,7 +50,7 @@ func (rb *ReadBuffer) ReadMessage() (JSONRPCMessage, error) {
 		header, err := rb.buffer.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				Logger.Println("closed connection")
+				Logger.Println("EOF - closed connection")
 			} else {
 				Logger.Printf("failed to read header: %s\n", err)
 			}

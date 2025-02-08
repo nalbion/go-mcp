@@ -233,6 +233,21 @@ type Result struct {
 
 type ResultMeta map[string]any
 
+func (r *Result) UnmarshalJSON(b []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if meta, ok := raw["_meta"]; raw != nil && ok {
+		r.Meta = meta.(ResultMeta)
+		delete(raw, "_meta")
+	}
+
+	r.AdditionalProperties = raw
+
+	return nil
+}
+
 // A successful (non-error) response to a request.
 type JSONRPCResponse struct {
 	// Id corresponds to the JSON schema field "id".

@@ -36,10 +36,10 @@ func NewProtocol(ctx context.Context, options *ProtocolOptions) *Protocol {
 		Protocol: *jsonrpc.NewProtocol(ctx),
 	}
 
-	p.OnRequest = p.onRequest
+	p.Protocol.OnRequest = p.onRequest
 	p.Protocol.RemoveResponseHandler = p.removeResponseHandler
 
-	p.SetNotificationHandler(NotificationsCancelledMethod, func(notification *jsonrpc.JSONRPCNotification) error {
+	p.Protocol.SetNotificationHandler(NotificationsCancelledMethod, func(notification *jsonrpc.JSONRPCNotification) error {
 		if cancelled, ok := notification.Params.AdditionalProperties.(CancelledNotificationParams); ok {
 			p.cancelRequest(cancelled.RequestId)
 			return nil
@@ -52,7 +52,7 @@ func NewProtocol(ctx context.Context, options *ProtocolOptions) *Protocol {
 }
 
 func (p *Protocol) Connect(ctx context.Context, transport jsonrpc.Transport) error {
-	p.SetNotificationHandler(NotificationsProgressMethod, func(notification *jsonrpc.JSONRPCNotification) error {
+	p.Protocol.SetNotificationHandler(NotificationsProgressMethod, func(notification *jsonrpc.JSONRPCNotification) error {
 		if progress, ok := notification.Params.AdditionalProperties.(ProgressNotificationParams); ok {
 			return p.onProgress(progress)
 		}
@@ -73,12 +73,12 @@ func (p *Protocol) Connect(ctx context.Context, transport jsonrpc.Transport) err
 type RequestOptions struct {
 	// If set, requests progress notifications from the remote end (if supported).
 	// When progress notifications are received, this callback will be invoked.
-	onProgress ProgressHandler
-	// Can be used to cancel an in-flight request. This will cause an context.Canceled to be returned from SendRequest().
-	cancel context.CancelFunc
-	// A timeout for this request. If exceeded, an McpError with code `RequestTimeout` will be returned from SendRequest().
-	// If not specified, `DEFAULT_REQUEST_TIMEOUT` will be used as the timeout.
-	timeout time.Duration
+	OnProgress ProgressHandler
+	// Can be used to Cancel an in-flight request. This will cause an context.Canceled to be returned from SendRequest().
+	Cancel context.CancelFunc
+	// A Timeout for this request. If exceeded, an McpError with code `RequestTimeout` will be returned from SendRequest().
+	// If not specified, `DEFAULT_REQUEST_TIMEOUT` will be used as the Timeout.
+	Timeout time.Duration
 }
 
 func (p *Protocol) SendRequest(
@@ -88,18 +88,18 @@ func (p *Protocol) SendRequest(
 	result *jsonrpc.Result,
 	options *RequestOptions,
 ) error {
-	if !p.IsConnected() {
+	if !p.Protocol.IsConnected() {
 		return errors.New("not connected")
 	}
 
 	if p.options != nil && p.options.EnforceStrictCapabilities {
-		p.AssertCapabilityForMethod(method)
+		p.Protocol.AssertCapabilityForMethod(method)
 	}
 
-	jsonrpcRequest, messageID := p.NewRequest(method, params)
+	jsonrpcRequest, messageID := p.Protocol.NewRequest(method, params)
 
-	if options != nil && options.onProgress != nil {
-		p.progressHandlers[messageID] = options.onProgress
+	if options != nil && options.OnProgress != nil {
+		p.progressHandlers[messageID] = options.OnProgress
 		if jsonrpcRequest.Params == nil {
 			jsonrpcRequest.Params = &jsonrpc.JSONRPCRequestParams{}
 		}
@@ -115,16 +115,16 @@ func (p *Protocol) SendRequest(
 	}
 
 	timeout := DEFAULT_REQUEST_TIMEOUT
-	if options != nil && options.timeout > 0 {
-		timeout = options.timeout
+	if options != nil && options.Timeout > 0 {
+		timeout = options.Timeout
 	}
 	ctx, cancelTimeout := context.WithTimeout(ctx, timeout)
 
-	return p.SendRequestInternal(ctx, jsonrpcRequest, messageID, result, cancelTimeout, func(reason string) {
+	return p.Protocol.SendRequestInternal(ctx, jsonrpcRequest, messageID, result, cancelTimeout, func(reason string) {
 		delete(p.progressHandlers, messageID)
 
-		if p.IsConnected() {
-			err := p.SendNotification(
+		if p.Protocol.IsConnected() {
+			err := p.Protocol.SendNotification(
 				NotificationsCancelledMethod,
 				&jsonrpc.JSONRPCNotificationParams{
 					AdditionalProperties: map[string]any{
@@ -134,7 +134,7 @@ func (p *Protocol) SendRequest(
 				},
 			)
 			if err != nil {
-				p.OnError(fmt.Errorf("failed to send cancel notification: %v", err))
+				p.Protocol.OnError(fmt.Errorf("failed to send cancel notification: %v", err))
 			}
 		}
 	})
@@ -164,7 +164,7 @@ func (p *Protocol) onProgress(notification ProgressNotificationParams) error {
 
 	handler := p.progressHandlers[int(progressToken)]
 	if handler == nil {
-		p.OnError(fmt.Errorf("received a progress notification for an unknown token: %v", progressToken))
+		p.Protocol.OnError(fmt.Errorf("received a progress notification for an unknown token: %v", progressToken))
 		return nil
 	}
 

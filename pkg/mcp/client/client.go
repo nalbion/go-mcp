@@ -57,7 +57,7 @@ func NewClient(
 		capabilities: options.Capabilities,
 	}
 
-	c.Protocol.SetContext(ctx)
+	// c.Protocol.SetContext(ctx)
 	// c.Protocol.EnforceStrictCapabilities = enforceStrictCapabilities
 
 	return c

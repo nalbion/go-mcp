@@ -10,6 +10,7 @@ import (
 	"os/exec"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
+	"github.com/nalbion/go-mcp/pkg/mcp/shared"
 )
 
 type StdioServerParameters struct {
@@ -73,7 +74,8 @@ func (t *StdioClientTransport) Start() error {
 					continue
 				}
 
-				_, err = io.WriteString(stdin, string(jsonMessage)+"/n")
+				fmt.Printf("sending message: %s\n", string(jsonMessage))
+				_, err = io.WriteString(stdin, string(jsonMessage)+"\n")
 				if err != nil {
 					if t.OnError != nil {
 						t.OnError(err)
@@ -88,6 +90,11 @@ func (t *StdioClientTransport) Start() error {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stderr pipe: %w", err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		if t.OnError != nil {
 			t.OnError(err)
@@ -100,6 +107,7 @@ func (t *StdioClientTransport) Start() error {
 
 	t.ctx, t.cancel = context.WithCancel(ctx)
 	go t.readServerOutput(stdout)
+	go t.readServerErr(stderr)
 
 	return nil
 }
@@ -141,8 +149,28 @@ func (t *StdioClientTransport) readServerOutput(reader io.Reader) {
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
+			jsonrpc.Logger.Printf("received chunk: %s\n", string(chunk))
 			t.readBuffer.Append(chunk)
 			t.processReadBuffer()
+		}
+	}
+}
+
+func (t *StdioClientTransport) readServerErr(reader io.Reader) {
+	buf := make([]byte, 8192)
+	for {
+		n, err := reader.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				if t.OnError != nil {
+					t.OnError(err)
+				}
+			}
+			break
+		}
+		if n > 0 {
+			// docker logs progress (and also "daemon not started") to stderr
+			shared.Logger.Printf("stderr: %s\n", string(buf[:n]))
 		}
 	}
 }
