@@ -1,4 +1,4 @@
-package shared
+package jsonrpc
 
 import (
 	"bytes"
@@ -7,14 +7,13 @@ import (
 	"io"
 	"testing"
 
-	"github.com/nalbion/go-mcp/pkg/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReadBuffer(t *testing.T) {
 	ctx := context.Background()
-	testMessage := jsonrpc.JSONRPCRequest{Method: "foobar"}
+	testMessage := JSONRPCRequest{Method: "foobar"}
 
 	t.Run("should have no messages after initialization", func(t *testing.T) {
 		reader := bytes.NewBuffer([]byte{})
@@ -54,7 +53,7 @@ func TestReadBuffer(t *testing.T) {
 		message, err := readBuffer.ReadMessage()
 		require.NoError(t, err)
 		require.NotNil(t, message)
-		require.Equal(t, "foobar", message.(*jsonrpc.JSONRPCRequest).Method)
+		require.Equal(t, "foobar", message.(*JSONRPCRequest).Method)
 	})
 
 	t.Run("should be reusable after clearing", func(t *testing.T) {
@@ -86,6 +85,6 @@ func TestReadBuffer(t *testing.T) {
 		message, err = readBuffer.ReadMessage()
 		require.NoError(t, err)
 		require.NotNil(t, message)
-		require.Equal(t, "foobar", message.(*jsonrpc.JSONRPCRequest).Method)
+		require.Equal(t, "foobar", message.(*JSONRPCRequest).Method)
 	})
 }

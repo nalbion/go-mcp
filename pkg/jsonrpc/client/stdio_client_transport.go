@@ -11,7 +11,6 @@ import (
 	"os/exec"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
-	"github.com/nalbion/go-mcp/pkg/mcp/shared"
 )
 
 type StdioServerParameters struct {
@@ -28,7 +27,7 @@ type StdioClientTransport struct {
 	serverParams StdioServerParameters
 	process      *os.Process
 	sendChannel  chan jsonrpc.JSONRPCMessage
-	readBuffer   *shared.ReadBuffer
+	readBuffer   *jsonrpc.ReadBuffer
 }
 
 func NewStdioClientTransport(ctx context.Context, server StdioServerParameters) *StdioClientTransport {
@@ -98,7 +97,7 @@ func (t *StdioClientTransport) Start() error {
 	}
 
 	t.process = cmd.Process
-	t.readBuffer = shared.NewReadBuffer(ctx, bufio.NewReader(stdout), t.OnMessage, t.OnError)
+	t.readBuffer = jsonrpc.NewReadBuffer(ctx, bufio.NewReader(stdout), t.OnMessage, t.OnError)
 
 	t.ctx, t.cancel = context.WithCancel(ctx)
 	go t.readBuffer.Start()

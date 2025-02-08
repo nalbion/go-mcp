@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
-	"github.com/nalbion/go-mcp/pkg/mcp/shared"
 )
 
 type StdioServerTransport struct {
@@ -17,7 +16,7 @@ type StdioServerTransport struct {
 	ctx          context.Context
 	inputStream  io.Reader
 	outputStream io.Writer
-	readBuffer   shared.ReadBuffer
+	readBuffer   jsonrpc.ReadBuffer
 	initialized  bool
 	readingJob   chan struct{}
 	readChannel  chan []byte

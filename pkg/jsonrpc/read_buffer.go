@@ -1,4 +1,4 @@
-package shared
+package jsonrpc
 
 import (
 	"bufio"
@@ -7,8 +7,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-
-	"github.com/nalbion/go-mcp/pkg/jsonrpc"
 )
 
 // ReadBuffer buffers a continuous stdio stream into discrete JSON-RPC messages.
@@ -16,14 +14,14 @@ import (
 type ReadBuffer struct {
 	ctx       context.Context
 	reader    *bufio.Reader
-	onMessage func(jsonrpc.JSONRPCMessage)
+	onMessage func(JSONRPCMessage)
 	onError   func(error)
 }
 
 func NewReadBuffer(
 	ctx context.Context,
 	reader io.Reader,
-	onMessage func(jsonrpc.JSONRPCMessage),
+	onMessage func(JSONRPCMessage),
 	onError func(error),
 ) *ReadBuffer {
 	return &ReadBuffer{
@@ -72,7 +70,7 @@ func (rb *ReadBuffer) Append(chunk []byte) {
 	// rb.buffer.Write(chunk)
 }
 
-func (rb *ReadBuffer) ReadMessage() (jsonrpc.JSONRPCMessage, error) {
+func (rb *ReadBuffer) ReadMessage() (JSONRPCMessage, error) {
 	var contentLength int64
 	var content []byte
 
@@ -129,5 +127,5 @@ func (rb *ReadBuffer) ReadMessage() (jsonrpc.JSONRPCMessage, error) {
 		}
 	}
 
-	return jsonrpc.ParseJSONRPCMessage(content)
+	return ParseJSONRPCMessage(content)
 }
