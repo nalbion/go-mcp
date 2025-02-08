@@ -22,7 +22,7 @@ func TestRemoveResponseHandler(t *testing.T) {
 	}
 	require.NotEmpty(t, p.progressHandlers)
 
-	transport := &jsonrpc.TransportBase{}
+	transport := &jsonrpc.BaseTransport{}
 	p.Connect(ctx, transport)
 	// client, server := jsonrpc.NewClientServerInMemoryTransports()
 	// transort := &jsonrpc.TransportBase{}

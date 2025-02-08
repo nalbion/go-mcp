@@ -20,7 +20,7 @@ func TestRemoveResponseHandler(t *testing.T) {
 	}
 	require.NotEmpty(t, p.requestHandlers)
 
-	transport := &TransportBase{}
+	transport := &BaseTransport{}
 	p.Connect(ctx, transport)
 
 	wg := sync.WaitGroup{}

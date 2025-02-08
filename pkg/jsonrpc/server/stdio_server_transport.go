@@ -12,7 +12,7 @@ import (
 )
 
 type StdioServerTransport struct {
-	jsonrpc.TransportBase
+	jsonrpc.BaseTransport
 	ctx          context.Context
 	inputStream  io.Reader
 	outputStream io.Writer

@@ -18,7 +18,7 @@ import (
 const SESSION_ID_PARAM = "sessionId"
 
 type SSEServerTransport struct {
-	jsonrpc.TransportBase
+	jsonrpc.BaseTransport
 	ctx         context.Context
 	cancel      context.CancelFunc
 	endpoint    string

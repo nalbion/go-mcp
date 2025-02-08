@@ -8,7 +8,7 @@ import (
 )
 
 type HttpClientTransport struct {
-	jsonrpc.TransportBase
+	jsonrpc.BaseTransport
 	// endpoint string // eg: "http://my-rpc-service:8080/rpc"
 	ctx    context.Context
 	client ybjsonrpc.RPCClient

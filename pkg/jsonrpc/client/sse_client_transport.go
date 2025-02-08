@@ -18,7 +18,7 @@ import (
 // Client transport for SSE: this will connect to a server using Server-Sent Events for receiving
 // messages and make separate POST requests for sending messages.
 type SSEClientTransport struct {
-	jsonrpc.TransportBase
+	jsonrpc.BaseTransport
 
 	client           *http.Client
 	url              *url.URL
@@ -69,14 +69,14 @@ func (s *SSEClientTransport) Start(ctx context.Context) error {
 				switch string(event.Event) {
 				case "error":
 					err := fmt.Errorf("error receiving SSE error: %s", event.Data)
-					s.TransportBase.OnError(err)
+					s.BaseTransport.OnError(err)
 					return
 				case "open":
 					// The connection is open, but we need to wait for the endpoint to be received.
 				case "endpoint":
 					endpointUrl, err := url.Parse(s.baseUrl + "/" + string(event.Data))
 					if err != nil {
-						s.TransportBase.OnError(err)
+						s.BaseTransport.OnError(err)
 						s.Close()
 						return
 					}
@@ -84,9 +84,9 @@ func (s *SSEClientTransport) Start(ctx context.Context) error {
 				default:
 					var message jsonrpc.JSONRPCMessage
 					if err := json.Unmarshal([]byte(event.Data), &message); err != nil {
-						s.TransportBase.OnError(err)
+						s.BaseTransport.OnError(err)
 					} else {
-						s.TransportBase.OnMessage(message)
+						s.BaseTransport.OnMessage(message)
 					}
 				}
 			}
@@ -120,7 +120,7 @@ func (s *SSEClientTransport) Send(ctx context.Context, message jsonrpc.JSONRPCMe
 
 		resp, err := s.client.Do(req)
 		if err != nil {
-			s.TransportBase.OnError(err)
+			s.BaseTransport.OnError(err)
 			return err
 		}
 		defer resp.Body.Close()
@@ -138,30 +138,30 @@ func (s *SSEClientTransport) Close() error {
 	}
 
 	s.session.Close()
-	s.TransportBase.OnClose()
+	s.BaseTransport.OnClose()
 	s.job.Wait()
 	return nil
 }
 
 func (s *SSEClientTransport) OnClose(block func()) {
-	old := s.TransportBase.OnClose
-	s.TransportBase.OnClose = func() {
+	old := s.BaseTransport.OnClose
+	s.BaseTransport.OnClose = func() {
 		old()
 		block()
 	}
 }
 
 func (s *SSEClientTransport) OnError(block func(err error)) {
-	old := s.TransportBase.OnError
-	s.TransportBase.OnError = func(err error) {
+	old := s.BaseTransport.OnError
+	s.BaseTransport.OnError = func(err error) {
 		old(err)
 		block(err)
 	}
 }
 
 func (s *SSEClientTransport) OnMessage(block func(message jsonrpc.JSONRPCMessage)) {
-	old := s.TransportBase.OnMessage
-	s.TransportBase.OnMessage = func(message jsonrpc.JSONRPCMessage) {
+	old := s.BaseTransport.OnMessage
+	s.BaseTransport.OnMessage = func(message jsonrpc.JSONRPCMessage) {
 		old(message)
 		block(message)
 	}

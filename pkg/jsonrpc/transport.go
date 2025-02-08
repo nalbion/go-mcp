@@ -13,25 +13,25 @@ type Transport interface {
 	SetOnMessage(func(message JSONRPCMessage))
 }
 
-type TransportBase struct {
+type BaseTransport struct {
 	OnClose   func()
 	OnError   func(err error)
 	OnMessage func(message JSONRPCMessage)
 }
 
-func (t *TransportBase) SetOnClose(f func()) {
+func (t *BaseTransport) SetOnClose(f func()) {
 	t.OnClose = f
 }
 
-func (t *TransportBase) SetOnError(f func(err error)) {
+func (t *BaseTransport) SetOnError(f func(err error)) {
 	t.OnError = f
 }
 
-func (t *TransportBase) SetOnMessage(f func(message JSONRPCMessage)) {
+func (t *BaseTransport) SetOnMessage(f func(message JSONRPCMessage)) {
 	t.OnMessage = f
 }
 
-func (t *TransportBase) Close() error {
+func (t *BaseTransport) Close() error {
 	if t.OnClose != nil {
 		t.OnClose()
 	}
@@ -43,11 +43,11 @@ func (t *TransportBase) Close() error {
 //
 // NOTE: This method should not be called explicitly when using Client, Server, or Protocol classes,
 // as they will implicitly call start().
-func (t *TransportBase) Start() error {
+func (t *BaseTransport) Start() error {
 	return nil
 }
 
-func (t *TransportBase) Send(message JSONRPCMessage) error {
+func (t *BaseTransport) Send(message JSONRPCMessage) error {
 	return nil
 }
 

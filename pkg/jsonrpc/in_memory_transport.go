@@ -23,7 +23,7 @@ func newInMemoryTransport() *InMemoryTransport {
 }
 
 type InMemoryTransport struct {
-	TransportBase
+	BaseTransport
 	otherTransport *InMemoryTransport
 	// messageQueue  chan (JSONRPCMessage)
 	messageQueue []JSONRPCMessage

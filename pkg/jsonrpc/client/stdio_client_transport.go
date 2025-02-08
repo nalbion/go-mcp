@@ -21,7 +21,7 @@ type StdioServerParameters struct {
 }
 
 type StdioClientTransport struct {
-	jsonrpc.TransportBase
+	jsonrpc.BaseTransport
 	ctx          context.Context
 	cancel       context.CancelFunc
 	serverParams StdioServerParameters
