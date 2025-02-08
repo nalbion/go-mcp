@@ -29,7 +29,7 @@ type JSONRPCErrorError struct {
 
 	// Additional information about the error. The value of this member is defined by
 	// the sender (e.g. detailed error information, nested errors etc.).
-	Data interface{} `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
+	Data any `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
 
 	// A short description of the error. The message SHOULD be limited to a concise
 	// single sentence.
@@ -38,7 +38,7 @@ type JSONRPCErrorError struct {
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *JSONRPCErrorError) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (j *JSONRPCErrorError) UnmarshalJSON(b []byte) error {
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *JSONRPCError) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (j *JSONRPCError) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-type JSONRPCMessage interface{}
+type JSONRPCMessage any
 
 // A notification which does not expect a response.
 type JSONRPCNotification struct {
@@ -100,16 +100,21 @@ type JSONRPCNotificationParams struct {
 	// additional metadata to their notifications.
 	Meta *JSONRPCNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
-	AdditionalProperties interface{} `mapstructure:",remain"`
+	AdditionalProperties any `mapstructure:",remain"`
 }
 
 // This parameter name is reserved by MCP to allow clients and servers to attach
 // additional metadata to their notifications.
-type JSONRPCNotificationParamsMeta map[string]interface{}
+type JSONRPCNotificationParamsMeta map[string]any
+
+// MarshalJSON implements json.Marshaler.
+func (j *JSONRPCNotificationParams) MarshalJSON() ([]byte, error) {
+	return marshalParam(j.AdditionalProperties, (*map[string]any)(j.Meta))
+}
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *JSONRPCNotification) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
@@ -147,14 +152,41 @@ type JSONRPCRequestParams struct {
 	// Meta corresponds to the JSON schema field "_meta".
 	Meta *JSONRPCRequestParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
-	AdditionalProperties interface{} `mapstructure:",remain"`
+	AdditionalProperties any `json:",inline" mapstructure:",remain"`
 }
 
-type JSONRPCRequestParamsMeta map[string]interface{}
+type JSONRPCRequestParamsMeta map[string]any
+
+// MarshalJSON implements json.Marshaler.
+func (j *JSONRPCRequestParams) MarshalJSON() ([]byte, error) {
+	return marshalParam(j.AdditionalProperties, (*map[string]any)(j.Meta))
+}
+
+func marshalParam(params any, meta *map[string]any) ([]byte, error) {
+	baseMap := map[string]any{}
+	if meta != nil {
+		baseMap["_meta"] = meta
+	}
+
+	if params != nil {
+		additionalProperties, err := json.Marshal(params)
+		if err != nil {
+			return nil, err
+		}
+		var additionalPropertiesMap map[string]any
+		if err := json.Unmarshal(additionalProperties, &additionalPropertiesMap); err != nil {
+			return nil, err
+		}
+		for k, v := range additionalPropertiesMap {
+			baseMap[k] = v
+		}
+	}
+	return json.Marshal(baseMap)
+}
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *JSONRPCRequest) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
@@ -182,10 +214,10 @@ type Result struct {
 	// to attach additional metadata to their responses.
 	Meta ResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
-	AdditionalProperties interface{} `mapstructure:",remain"`
+	AdditionalProperties any `mapstructure:",remain"`
 }
 
-type ResultMeta map[string]interface{}
+type ResultMeta map[string]any
 
 // A successful (non-error) response to a request.
 type JSONRPCResponse struct {
@@ -201,7 +233,7 @@ type JSONRPCResponse struct {
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *JSONRPCResponse) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}

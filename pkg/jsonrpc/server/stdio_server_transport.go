@@ -57,8 +57,7 @@ func (s *StdioServerTransport) readFromStdin() {
 					s.OnError(err)
 				}
 			}
-			close(s.readingJob)
-			return
+			break
 		}
 		if n > 0 {
 			chunk := make([]byte, n)
@@ -66,6 +65,8 @@ func (s *StdioServerTransport) readFromStdin() {
 			s.readChannel <- chunk
 		}
 	}
+
+	s.Close()
 }
 
 func (s *StdioServerTransport) processMessages() {
@@ -107,7 +108,7 @@ func (s *StdioServerTransport) Close() error {
 	return nil
 }
 
-func (s *StdioServerTransport) Send(message *jsonrpc.JSONRPCMessage) error {
+func (s *StdioServerTransport) Send(message jsonrpc.JSONRPCMessage) error {
 	data, err := json.Marshal(message)
 	if err != nil {
 		return err
