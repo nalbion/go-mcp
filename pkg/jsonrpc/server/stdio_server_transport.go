@@ -16,7 +16,7 @@ type StdioServerTransport struct {
 	ctx          context.Context
 	inputStream  io.Reader
 	outputStream io.Writer
-	readBuffer   jsonrpc.ReadBuffer
+	readBuffer   *jsonrpc.ReadBuffer
 	initialized  bool
 	readingJob   chan struct{}
 	readChannel  chan []byte
@@ -29,6 +29,7 @@ func NewStdioServerTransport(ctx context.Context, inputStream io.Reader, outputS
 		ctx:          ctx,
 		inputStream:  inputStream,
 		outputStream: outputStream,
+		readBuffer:   jsonrpc.NewReadBuffer(ctx),
 		readChannel:  make(chan []byte, 100),
 		outputWriter: bufio.NewWriter(outputStream),
 	}

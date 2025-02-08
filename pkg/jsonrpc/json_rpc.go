@@ -23,6 +23,10 @@ type JSONRPCError struct {
 	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
 }
 
+func (j JSONRPCError) getJSONRPCVersion() string {
+	return j.Jsonrpc
+}
+
 type JSONRPCErrorError struct {
 	// The error type that occurred.
 	Code int `json:"code" yaml:"code" mapstructure:"code"`
@@ -81,7 +85,9 @@ func (j *JSONRPCError) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-type JSONRPCMessage any
+type JSONRPCMessage interface {
+	getJSONRPCVersion() string
+}
 
 // A notification which does not expect a response.
 type JSONRPCNotification struct {
@@ -93,6 +99,10 @@ type JSONRPCNotification struct {
 
 	// Params corresponds to the JSON schema field "params".
 	Params *JSONRPCNotificationParams `json:"params,omitempty" yaml:"params,omitempty" mapstructure:"params,omitempty"`
+}
+
+func (j JSONRPCNotification) getJSONRPCVersion() string {
+	return j.Jsonrpc
 }
 
 type JSONRPCNotificationParams struct {
@@ -146,6 +156,10 @@ type JSONRPCRequest struct {
 
 	// Params corresponds to the JSON schema field "params".
 	Params *JSONRPCRequestParams `json:"params,omitempty" yaml:"params,omitempty" mapstructure:"params,omitempty"`
+}
+
+func (j JSONRPCRequest) getJSONRPCVersion() string {
+	return j.Jsonrpc
 }
 
 type JSONRPCRequestParams struct {
@@ -229,6 +243,10 @@ type JSONRPCResponse struct {
 
 	// Result corresponds to the JSON schema field "result".
 	Result Result `json:"result" yaml:"result" mapstructure:"result"`
+}
+
+func (j JSONRPCResponse) getJSONRPCVersion() string {
+	return j.Jsonrpc
 }
 
 // UnmarshalJSON implements json.Unmarshaler.

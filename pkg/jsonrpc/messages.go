@@ -56,16 +56,18 @@ func parseNofication(content []byte) (*JSONRPCNotification, error) {
 		return nil, errors.New("no method provided")
 	}
 
-	meta, params, err := parseAdditionalProperties(content)
-	if err != nil {
-		return nil, err
-	}
+	if request.Params != nil {
+		meta, params, err := parseAdditionalProperties(content)
+		if err != nil {
+			return nil, err
+		}
 
-	metaParams := JSONRPCNotificationParamsMeta(meta)
-	if metaParams != nil {
-		request.Params.Meta = &metaParams
+		metaParams := JSONRPCNotificationParamsMeta(meta)
+		if metaParams != nil {
+			request.Params.Meta = &metaParams
+		}
+		request.Params.AdditionalProperties = params
 	}
-	request.Params.AdditionalProperties = params
 
 	return &request, nil
 }

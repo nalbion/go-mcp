@@ -1,7 +1,7 @@
 package jsonrpc
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -12,62 +12,30 @@ import (
 // ReadBuffer buffers a continuous stdio stream into discrete JSON-RPC messages.
 // used by StdIOClientTransport and StdIOServerTransport
 type ReadBuffer struct {
-	ctx       context.Context
-	reader    *bufio.Reader
-	onMessage func(JSONRPCMessage)
-	onError   func(error)
+	ctx    context.Context
+	buffer *bytes.Buffer
 }
 
 func NewReadBuffer(
 	ctx context.Context,
-	reader io.Reader,
-	onMessage func(JSONRPCMessage),
-	onError func(error),
 ) *ReadBuffer {
 	return &ReadBuffer{
-		ctx:       ctx,
-		reader:    bufio.NewReader(reader),
-		onMessage: onMessage,
-		onError:   onError,
+		ctx:    ctx,
+		buffer: &bytes.Buffer{},
 	}
 }
 
 func (rb *ReadBuffer) Close() {
-	rb.reader.Reset(nil)
-	rb.reader = nil
+	rb.buffer.Reset()
+	rb.buffer = nil
 }
 
 func (rb *ReadBuffer) Clear() {
-	rb.reader.Reset(rb.reader)
-}
-
-func (rb *ReadBuffer) Start() {
-	for {
-		select {
-		case <-rb.ctx.Done():
-			rb.Close()
-			return
-		default:
-			message, err := rb.ReadMessage()
-			if err != nil {
-				if err != io.EOF {
-					Logger.Printf("failed to receive message: %s", err)
-					if rb.onError != nil {
-						rb.onError(err)
-					}
-				}
-				return
-			}
-
-			if rb.onMessage != nil {
-				rb.onMessage(message)
-			}
-		}
-	}
+	rb.buffer.Reset()
 }
 
 func (rb *ReadBuffer) Append(chunk []byte) {
-	// rb.buffer.Write(chunk)
+	rb.buffer.Write(chunk)
 }
 
 func (rb *ReadBuffer) ReadMessage() (JSONRPCMessage, error) {
@@ -75,11 +43,11 @@ func (rb *ReadBuffer) ReadMessage() (JSONRPCMessage, error) {
 	var content []byte
 
 	for {
-		if rb.reader == nil {
+		if rb.buffer == nil {
 			return nil, errors.New("read buffer has been closed")
 		}
 
-		header, err := rb.reader.ReadString('\n')
+		header, err := rb.buffer.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
 				Logger.Println("closed connection")
@@ -121,7 +89,7 @@ func (rb *ReadBuffer) ReadMessage() (JSONRPCMessage, error) {
 
 	if content == nil {
 		content = make([]byte, contentLength)
-		_, err := io.ReadFull(rb.reader, content)
+		_, err := io.ReadFull(rb.buffer, content)
 		if err != nil {
 			return nil, err
 		}

@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -97,10 +96,10 @@ func (t *StdioClientTransport) Start() error {
 	}
 
 	t.process = cmd.Process
-	t.readBuffer = jsonrpc.NewReadBuffer(ctx, bufio.NewReader(stdout), t.OnMessage, t.OnError)
+	t.readBuffer = jsonrpc.NewReadBuffer(ctx)
 
 	t.ctx, t.cancel = context.WithCancel(ctx)
-	go t.readBuffer.Start()
+	go t.readServerOutput(stdout)
 
 	return nil
 }
@@ -125,4 +124,43 @@ func (t *StdioClientTransport) Close() error {
 		t.readBuffer.Close()
 	}
 	return nil
+}
+
+func (t *StdioClientTransport) readServerOutput(reader io.Reader) {
+	buf := make([]byte, 8192)
+	for {
+		n, err := reader.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				if t.OnError != nil {
+					t.OnError(err)
+				}
+			}
+			break
+		}
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			t.readBuffer.Append(chunk)
+			t.processReadBuffer()
+		}
+	}
+}
+
+func (t *StdioClientTransport) processReadBuffer() {
+	for {
+		message, err := t.readBuffer.ReadMessage()
+		if err != nil {
+			if t.OnError != nil {
+				t.OnError(err)
+			}
+			return
+		}
+		if message == nil {
+			break
+		}
+		if t.OnMessage != nil {
+			t.OnMessage(message)
+		}
+	}
 }
