@@ -56,6 +56,17 @@ func parseNofication(content []byte) (*JSONRPCNotification, error) {
 		return nil, errors.New("no method provided")
 	}
 
+	meta, params, err := parseAdditionalProperties(content)
+	if err != nil {
+		return nil, err
+	}
+
+	metaParams := JSONRPCNotificationParamsMeta(meta)
+	if metaParams != nil {
+		request.Params.Meta = &metaParams
+	}
+	request.Params.AdditionalProperties = params
+
 	return &request, nil
 }
 
@@ -70,7 +81,43 @@ func parseRequest(content []byte) (*JSONRPCRequest, error) {
 		return nil, errors.New("no method provided")
 	}
 
+	meta, params, err := parseAdditionalProperties(content)
+	if err != nil {
+		return nil, err
+	}
+
+	metaParams := JSONRPCRequestParamsMeta(meta)
+	if metaParams != nil {
+		request.Params.Meta = &metaParams
+	}
+	request.Params.AdditionalProperties = params
+
 	return &request, nil
+}
+
+func parseAdditionalProperties(content []byte) (map[string]any, map[string]any, error) {
+	jsonRequest := map[string]interface{}{}
+	err := json.Unmarshal(content, &jsonRequest)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var meta map[string]any
+	var params map[string]any
+
+	if metaValue, ok := jsonRequest["_meta"]; ok {
+		if meta, ok = metaValue.(map[string]interface{}); !ok {
+			return nil, nil, errors.New("invalid _meta")
+		}
+	}
+
+	if paramsValue, ok := jsonRequest["params"]; ok {
+		if params, ok = paramsValue.(map[string]interface{}); !ok {
+			return nil, nil, errors.New("invalid params")
+		}
+	}
+
+	return meta, params, nil
 }
 
 func ParseResult(content []byte, messageResult *Result) error {
@@ -82,26 +129,27 @@ func ParseResult(content []byte, messageResult *Result) error {
 		return err
 	}
 
-	// If AdditionalProperties is not nil, unmarshal it into the correct type
-	if messageResult.AdditionalProperties != nil {
-		resultType := reflect.TypeOf(messageResult.AdditionalProperties)
-		isPointer := resultType.Kind() == reflect.Ptr
+	if messageResult.AdditionalProperties == nil {
+		messageResult.AdditionalProperties = make(map[string]interface{})
+	}
 
-		if isPointer {
-			resultType = resultType.Elem()
-		}
+	resultType := reflect.TypeOf(messageResult.AdditionalProperties)
+	isPointer := resultType.Kind() == reflect.Ptr
 
-		resultValue := reflect.New(resultType).Interface()
+	if isPointer {
+		resultType = resultType.Elem()
+	}
 
-		if err := json.Unmarshal(content, resultValue); err != nil {
-			return err
-		}
+	resultValue := reflect.New(resultType).Interface()
 
-		if isPointer {
-			messageResult.AdditionalProperties = resultValue
-		} else {
-			messageResult.AdditionalProperties = reflect.ValueOf(resultValue).Elem().Interface()
-		}
+	if err := json.Unmarshal(content, resultValue); err != nil {
+		return err
+	}
+
+	if isPointer {
+		messageResult.AdditionalProperties = resultValue
+	} else {
+		messageResult.AdditionalProperties = reflect.ValueOf(resultValue).Elem().Interface()
 	}
 
 	return nil

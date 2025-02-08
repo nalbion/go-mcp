@@ -98,14 +98,14 @@ type JSONRPCNotification struct {
 type JSONRPCNotificationParams struct {
 	// This parameter name is reserved by MCP to allow clients and servers to attach
 	// additional metadata to their notifications.
-	// Meta JSONRPCNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
+	Meta *JSONRPCNotificationParamsMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	AdditionalProperties interface{} `mapstructure:",remain"`
 }
 
 // This parameter name is reserved by MCP to allow clients and servers to attach
 // additional metadata to their notifications.
-// type JSONRPCNotificationParamsMeta map[string]interface{}
+type JSONRPCNotificationParamsMeta map[string]interface{}
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *JSONRPCNotification) UnmarshalJSON(b []byte) error {

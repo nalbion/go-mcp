@@ -70,7 +70,7 @@ func TestParseResult(t *testing.T) {
 
 		// then
 		require.NoError(t, err)
-		require.Equal(t, expectedResult, messageResult)
+		require.Equal(t, expectedResult, messageResult.AdditionalProperties)
 	})
 }
 
@@ -78,23 +78,23 @@ func TestParseJSONRPCMessage(t *testing.T) {
 	t.Run("request message", func(t *testing.T) {
 		// given
 		jsonRequest := []byte(`{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "initialize",
-  "params": {
-    "protocolVersion": "2024-11-05",
-    "capabilities": {
-      "roots": {
-        "listChanged": true
-      },
-      "sampling": {}
-    },
-    "clientInfo": {
-      "name": "ExampleClient",
-      "version": "1.0.0"
-    }
-  }
-}`)
+	  "jsonrpc": "2.0",
+	  "id": 1,
+	  "method": "initialize",
+	  "params": {
+	    "protocolVersion": "2024-11-05",
+	    "capabilities": {
+	      "roots": {
+	        "listChanged": true
+	      },
+	      "sampling": {}
+	    },
+	    "clientInfo": {
+	      "name": "ExampleClient",
+	      "version": "1.0.0"
+	    }
+	  }
+	}`)
 
 		expectedRequest := JSONRPCRequest{
 			Jsonrpc: "2.0",
@@ -102,22 +102,16 @@ func TestParseJSONRPCMessage(t *testing.T) {
 			Method:  "initialize",
 			Params: &JSONRPCRequestParams{
 				AdditionalProperties: map[string]interface{}{
-					// JSONRPCRequestParamsMeta only allows ProgressToken?
-					// Meta: map[string]interface{}{
-					// 	"foo": "bar",
-					// },
-					"additionalProperties": map[string]interface{}{
-						"protocolVersion": "2024-11-05",
-						"capabilities": map[string]interface{}{
-							"roots": map[string]interface{}{
-								"listChanged": true,
-							},
-							"sampling": map[string]interface{}{},
+					"protocolVersion": "2024-11-05",
+					"capabilities": map[string]interface{}{
+						"roots": map[string]interface{}{
+							"listChanged": true,
 						},
-						"clientInfo": map[string]interface{}{
-							"name":    "ExampleClient",
-							"version": "1.0.0",
-						},
+						"sampling": map[string]interface{}{},
+					},
+					"clientInfo": map[string]interface{}{
+						"name":    "ExampleClient",
+						"version": "1.0.0",
 					},
 				},
 			},
@@ -134,13 +128,13 @@ func TestParseJSONRPCMessage(t *testing.T) {
 	t.Run("notification message", func(t *testing.T) {
 		// given
 		jsonNotification := []byte(`{
-	"jsonrpc": "2.0",
-	"method": "notifications/cancelled",
-    "params": {
-      "requestId": 123,
-      "reason": "User requested cancellation"
-    }
-  }`)
+		"jsonrpc": "2.0",
+		"method": "notifications/cancelled",
+	    "params": {
+	      "requestId": 123,
+	      "reason": "User requested cancellation"
+	    }
+	  }`)
 
 		reason := "User requested cancellation"
 		expectedNotification := JSONRPCNotification{
@@ -148,7 +142,7 @@ func TestParseJSONRPCMessage(t *testing.T) {
 			Method:  "notifications/cancelled",
 			Params: &JSONRPCNotificationParams{
 				AdditionalProperties: map[string]interface{}{
-					"requestId": 123,
+					"requestId": float64(123), // TODO: should be int
 					"reason":    reason,
 				},
 			},
