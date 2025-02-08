@@ -1,0 +1,548 @@
+package server
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+
+	"github.com/nalbion/go-mcp/pkg/jsonrpc"
+	"github.com/nalbion/go-mcp/pkg/mcp/shared"
+)
+
+type ServerOptions struct {
+	shared.ProtocolOptions
+	Capabilities shared.ServerCapabilities
+}
+
+func NewServerOptions() ServerOptions {
+	return ServerOptions{
+		ProtocolOptions: shared.ProtocolOptions{
+			EnforceStrictCapabilities: true,
+		},
+		// Capabilities:     shared.ServerCapabilities{},
+	}
+}
+
+// An MCP server on top of a pluggable transport.
+// This server automatically responds to the initialization flow as initiated by the client.
+// You can register tools, prompts, and resources using AddTool(), AddPrompt()), and AddResource().
+// The server will then automatically handle listing and retrieval requests from the client.
+type Server struct {
+	*shared.Protocol
+	ctx                context.Context
+	serverInfo         shared.Implementation
+	options            *ServerOptions
+	clientCapabilities *shared.ClientCapabilities
+	clientVersion      *shared.Implementation
+	capabilities       shared.ServerCapabilities
+	tools              map[string]RegisteredTool
+	prompts            map[string]RegisteredPrompt
+	resources          map[string]RegisteredResource
+	onInitialized      jsonrpc.NotificationHandler
+	// onClose            func()
+}
+
+func NewServer(ctx context.Context, serverInfo shared.Implementation, options *ServerOptions) *Server {
+	s := &Server{
+		Protocol:     shared.NewProtocol(ctx, &options.ProtocolOptions),
+		ctx:          ctx,
+		serverInfo:   serverInfo,
+		options:      options,
+		capabilities: options.Capabilities,
+		tools:        make(map[string]RegisteredTool),
+		prompts:      make(map[string]RegisteredPrompt),
+		resources:    make(map[string]RegisteredResource),
+		// onInitialized: func(notification shared.JSONRPCNotificationMessage) error { return nil },
+		// onClose:       func() {},
+	}
+
+	shared.Logger.Printf("Initializing MCP server with capabilities: %v", s.capabilities)
+
+	s.SetContext(s.ctx)
+
+	s.SetRequestHandler(shared.InitializeMethod, s.handleInitialize)
+	s.SetNotificationHandler(shared.InitializedMethod, s.onInitialized)
+
+	if s.capabilities.Tools != nil {
+		s.SetRequestHandler(shared.ToolsListMethod, s.handleListTools)
+		s.SetRequestHandler(shared.ToolsCallMethod, s.handleCallTool)
+	}
+
+	if s.capabilities.Prompts != nil {
+		s.SetRequestHandler(shared.ListPromptsMethod, s.handleListPrompts)
+		s.SetRequestHandler(shared.GetPromptsMethod, s.handleGetPrompt)
+	}
+
+	if s.capabilities.Resources != nil {
+		s.SetRequestHandler(shared.ListResourcesMethod, s.handleListResources)
+		s.SetRequestHandler(shared.ReadResourcesMethod, s.handleReadResource)
+		// s.SetRequestHandler(shared.ListResourcesTemplatesMethod, s.handleListResourceTemplates)
+	}
+
+	return s
+}
+
+func (s *Server) handleInitialize(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+	shared.Logger.Printf("Handling initialize request from client: %v", request.Params)
+
+	if initParams, ok := request.Params.AdditionalProperties.(shared.InitializeRequestParams); !ok {
+		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid initialize request parameters", nil)
+	} else {
+		s.clientCapabilities = &initParams.Capabilities
+		s.clientVersion = &initParams.ClientInfo
+
+		if slices.Contains(shared.SupportedProtocolVersions, initParams.ProtocolVersion) {
+			s.clientVersion.Version = initParams.ProtocolVersion
+		} else {
+			shared.Logger.Printf("Client requested unsupported protocol version, falling back to latest supported version: %s\n", initParams.ProtocolVersion)
+			s.clientVersion.Version = shared.LatestProtocolVersion
+		}
+
+		return jsonrpc.Result{
+			AdditionalProperties: shared.InitializeResult{
+				ProtocolVersion: "1.0",
+				Capabilities:    s.capabilities,
+				ServerInfo:      s.serverInfo,
+			},
+		}, nil
+	}
+}
+
+func (s *Server) OnInitialized(handler jsonrpc.NotificationHandler) {
+	old := s.onInitialized
+	s.onInitialized = func(notification *jsonrpc.JSONRPCNotification) error {
+		if err := old(notification); err != nil {
+			return err
+		}
+		if err := handler(notification); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+const maxListResults = 100
+
+func (s *Server) handleListTools(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+	shared.Logger.Printf("Handling list tools request from client: %v", request.Params)
+	toolList := make([]shared.Tool, 0, len(s.tools))
+	for _, tool := range s.tools {
+		toolList = append(toolList, tool.Tool)
+	}
+
+	var cursor *string
+	if listParams, ok := request.Params.AdditionalProperties.(shared.ListToolsRequestParams); ok {
+		cursor = listParams.Cursor
+	}
+
+	toolList, nextCursor, err := paginate(request.Id, toolList, cursor)
+	if err != nil {
+		return jsonrpc.Result{}, err
+	}
+
+	return jsonrpc.Result{
+		AdditionalProperties: shared.ListToolsResult{
+			Tools:      toolList,
+			NextCursor: nextCursor,
+		},
+	}, nil
+}
+
+func (s *Server) handleListPrompts(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+	shared.Logger.Printf("Handling list prompts request from client: %v", request.Params)
+	promptList := make([]shared.Prompt, 0, len(s.prompts))
+	for _, prompt := range s.prompts {
+		promptList = append(promptList, prompt.Prompt)
+	}
+
+	var cursor *string
+	if listParams, ok := request.Params.AdditionalProperties.(shared.ListPromptsRequestParams); ok {
+		cursor = listParams.Cursor
+	}
+
+	promptList, nextCursor, err := paginate(request.Id, promptList, cursor)
+	if err != nil {
+		return jsonrpc.Result{}, err
+	}
+
+	return jsonrpc.Result{
+		AdditionalProperties: shared.ListPromptsResult{
+			Prompts:    promptList,
+			NextCursor: nextCursor,
+		},
+	}, nil
+}
+
+func (s *Server) handleListResources(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+	shared.Logger.Printf("Handling list resources request from client: %v", request.Params)
+	resourceList := make([]shared.Resource, 0, len(s.resources))
+	for _, resource := range s.resources {
+		resourceList = append(resourceList, resource.Resource)
+	}
+
+	var cursor *string
+	if listParams, ok := request.Params.AdditionalProperties.(shared.ListResourcesRequestParams); ok {
+		cursor = listParams.Cursor
+	}
+
+	resourceList, nextCursor, err := paginate(request.Id, resourceList, cursor)
+	if err != nil {
+		return jsonrpc.Result{}, err
+	}
+
+	return jsonrpc.Result{
+		AdditionalProperties: shared.ListResourcesResult{
+			Resources:  resourceList,
+			NextCursor: nextCursor,
+		},
+	}, nil
+}
+
+func (s *Server) handleCallTool(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+	shared.Logger.Printf("Handling call tool request from client: %v", request.Params)
+
+	if callParams, ok := request.Params.AdditionalProperties.(shared.CallToolRequestParams); !ok {
+		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid call tool request parameters", nil)
+	} else {
+		if tool, ok := s.tools[callParams.Name]; !ok {
+			return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Tool not found", nil)
+		} else {
+			toolResult, err := tool.Handler(callParams)
+			if err != nil {
+				return jsonrpc.Result{}, err
+			}
+			return jsonrpc.Result{
+				AdditionalProperties: toolResult,
+			}, nil
+		}
+	}
+}
+
+func (s *Server) handleGetPrompt(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+	shared.Logger.Printf("Handling get prompt request from client: %v", request.Params)
+
+	if getParams, ok := request.Params.AdditionalProperties.(shared.GetPromptRequestParams); !ok {
+		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid get prompt request parameters", nil)
+	} else {
+		if prompt, ok := s.prompts[getParams.Name]; !ok {
+			return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Prompt not found", nil)
+		} else {
+			promptResult := prompt.MessageProvider(getParams)
+			return jsonrpc.Result{
+				AdditionalProperties: promptResult,
+			}, nil
+		}
+	}
+}
+
+func (s *Server) handleReadResource(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+	shared.Logger.Printf("Handling read resource request from client: %v", request.Params)
+
+	if readParams, ok := request.Params.AdditionalProperties.(shared.ReadResourceRequestParams); !ok {
+		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid read resource request parameters", nil)
+	} else {
+		if resource, ok := s.resources[readParams.Uri]; !ok {
+			return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Resource not found", nil)
+		} else {
+			resourceResult := resource.ReadHandler(readParams)
+			return jsonrpc.Result{
+				AdditionalProperties: resourceResult,
+			}, nil
+		}
+	}
+}
+
+// func (s *Server) handleListResourceTemplates(ctx context.Context, request jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+// }
+
+func (c *Server) AssertCapabilityForMethod(method jsonrpc.Method) error {
+	switch method {
+	case shared.SamplingCreateMessageMethod:
+		if c.clientCapabilities.Sampling == nil {
+			return fmt.Errorf("client does nto support sampling (required for %s)", method)
+		}
+	case shared.RootsListMethod:
+		if c.clientCapabilities.Roots == nil {
+			return fmt.Errorf("client does not support roots (required for %s)", method)
+		}
+	}
+
+	return nil
+}
+
+func (c *Server) AssertNotificationCapability(method jsonrpc.Method) error {
+	// switch method {
+	// case shared.LoggingMessageNotificationMethod:
+	// 	if c.clientCapabilities.Logging == nil {
+	// 		return fmt.Errorf("client does not support logging (required for %s)", method)
+	// 	}
+	// case shared.ResourceUpdatedNotificationMethod, shared.ResourceListChangedNotificationMethod:
+	// 	if c.clientCapabilities.Resources == nil {
+	// 		return fmt.Errorf("client does not support resources (required for %s)", method)
+	// 	}
+	// case shared.ToolListChangedNotificationMethod:
+	// 	if c.clientCapabilities.Tools == nil {
+	// 		return fmt.Errorf("client does not support tools (required for %s)", method)
+	// 	}
+	// case shared.PromptListChangedNotificationMethod:
+	// 	if c.clientCapabilities.Prompts == nil {
+	// 		return fmt.Errorf("client does not support prompts (required for %s)", method)
+	// 	}
+	// }
+
+	return nil
+}
+
+func (c *Server) AssertRequestHandlerCapability(method jsonrpc.Method) error {
+	switch method {
+	// case shared.SamplingCreateMessageMethod:
+	// 	if c.capabilities.Sampling == nil {
+	// 		return fmt.Errorf("server does not support sampling (required for %s)", method)
+	// 	}
+	case shared.LoggingSetLevelMethod:
+		if c.capabilities.Logging == nil {
+			return fmt.Errorf("server does not support logging (required for %s)", method)
+		}
+	case shared.GetPromptsMethod, shared.ListPromptsMethod:
+		if c.capabilities.Prompts == nil {
+			return fmt.Errorf("server does not support prompts (required for %s)", method)
+		}
+	case shared.ListResourcesMethod, shared.ReadResourcesMethod, shared.ListResourcesTemplatesMethod:
+		if c.capabilities.Resources == nil {
+			return fmt.Errorf("server does not support resources (required for %s)", method)
+		}
+	case shared.ToolsCallMethod, shared.ToolsListMethod:
+		if c.capabilities.Tools == nil {
+			return fmt.Errorf("server does not support tools (required for %s)", method)
+		}
+	}
+
+	return nil
+}
+
+// AddTool registers a single tool. This tool can then be called by the client
+func (s *Server) AddTool(
+	name string,
+	description string,
+	inputSchema shared.ToolInputSchema,
+	handler func(shared.CallToolRequestParams) (shared.CallToolResult, error),
+) error {
+	if s.capabilities.Tools == nil {
+		return errors.New("Server does not support tools capability. Enable it in ServerOptions.")
+	}
+
+	shared.Logger.Printf("Registering tool %s", name)
+	s.tools[name] = RegisteredTool{
+		Tool: shared.Tool{
+			Name:        name,
+			Description: &description,
+			InputSchema: inputSchema,
+		},
+		Handler: handler,
+	}
+
+	return nil
+}
+
+// AddTools registers multiple tools at once.
+func (s *Server) AddTools(toolsToAdd []RegisteredTool) error {
+	if s.capabilities.Tools == nil {
+		return errors.New("Server does not support tools capability.")
+	}
+
+	shared.Logger.Printf("Registering %d tools\n", len(toolsToAdd))
+	for _, rt := range toolsToAdd {
+		shared.Logger.Printf("Registering tool %s", rt.Tool.Name)
+		s.tools[rt.Tool.Name] = rt
+	}
+
+	return nil
+}
+
+// AddPrompt registers a single prompt. The prompt can then be retrieved by the client.
+func (s *Server) AddPrompt(prompt shared.Prompt, promptProvider func(shared.GetPromptRequestParams) shared.GetPromptResult) error {
+	if s.capabilities.Prompts == nil {
+		return errors.New("Server does not support prompts capability.")
+	}
+
+	shared.Logger.Printf("Registering prompt %s", prompt.Name)
+	s.prompts[prompt.Name] = RegisteredPrompt{
+		Prompt:          prompt,
+		MessageProvider: promptProvider,
+	}
+
+	return nil
+}
+
+// AddPrompts registers multiple prompts at once.
+func (s *Server) AddPrompts(promptsToAdd []RegisteredPrompt) error {
+	if s.capabilities.Prompts == nil {
+		return errors.New("Server does not support prompts capability.")
+	}
+
+	shared.Logger.Printf("Registering %d prompts", len(promptsToAdd))
+	for _, rp := range promptsToAdd {
+		shared.Logger.Printf("Registering prompt %s", rp.Prompt.Name)
+		s.prompts[rp.Prompt.Name] = rp
+	}
+
+	return nil
+}
+
+// AddResource registers a single resource.
+func (s *Server) AddResource(
+	uri string,
+	name string,
+	description *string,
+	mimeType *string,
+	readHandler func(shared.ReadResourceRequestParams) shared.ReadResourceResult,
+) error {
+	if s.capabilities.Resources == nil {
+		return errors.New("Server does not support resources capability.")
+	}
+
+	shared.Logger.Printf("Registering resource %s at %s", name, uri)
+	s.resources[uri] = RegisteredResource{
+		Resource: shared.Resource{
+			Uri:         uri,
+			Name:        name,
+			Description: description,
+			MimeType:    mimeType,
+		},
+		ReadHandler: readHandler,
+	}
+
+	return nil
+}
+
+// AddResources registers multiple resources at once.
+func (s *Server) AddResources(resourcesToAdd []RegisteredResource) error {
+	if s.capabilities.Resources == nil {
+		return errors.New("Server does not support resources capability.")
+	}
+
+	shared.Logger.Printf("Registering %d resources", len(resourcesToAdd))
+	for _, r := range resourcesToAdd {
+		shared.Logger.Printf("Registering resource %s at %s", r.Resource.Name, r.Resource.Uri)
+		s.resources[r.Resource.Uri] = r
+	}
+
+	return nil
+}
+
+// Ping sends a ping request to the client to check connectivity.
+func (s *Server) Ping() error {
+	return s.SendRequest(s.ctx, shared.PingMethod, nil, nil, nil)
+}
+
+// CreateMessage creates a message using the server's sampling capability.
+func (s *Server) CreateMessage(params shared.CreateMessageRequestParams, options *shared.RequestOptions) (*shared.CreateMessageResult, error) {
+	result := &shared.CreateMessageResult{}
+
+	err := s.SendRequest(
+		s.ctx,
+		shared.SamplingCreateMessageMethod,
+		&jsonrpc.JSONRPCRequestParams{
+			AdditionalProperties: params,
+		},
+		&jsonrpc.Result{
+			AdditionalProperties: result,
+		},
+		options)
+
+	return result, err
+}
+
+// ListRoots lists the available "roots" from the client's perspective (if supported).
+func (s *Server) ListRoots(options *shared.RequestOptions) (*shared.ListRootsResult, error) {
+	result := &shared.ListRootsResult{}
+
+	err := s.SendRequest(
+		s.ctx,
+		shared.RootsListMethod,
+		nil,
+		&jsonrpc.Result{
+			AdditionalProperties: result,
+		},
+		options)
+
+	return result, err
+}
+
+// SendLoggingMessage sends a logging message notification to the client.
+func (s *Server) SendLoggingMessage(params shared.LoggingMessageNotificationParams) error {
+	return s.SendNotification(
+		shared.LoggingMessageNotificationMethod,
+		&jsonrpc.JSONRPCNotificationParams{
+			AdditionalProperties: params,
+		},
+	)
+}
+
+// SendResourceUpdated sends a resource-updated notification to the client.
+func (s *Server) SendResourceUpdated(params shared.ResourceUpdatedNotificationParams) error {
+	return s.SendNotification(
+		shared.ResourceUpdatedNotificationMethod,
+		&jsonrpc.JSONRPCNotificationParams{
+			AdditionalProperties: params,
+		},
+	)
+}
+
+// SendResourceListChanged sends a notification to the client indicating that the list of resources has changed.
+func (s *Server) SendResourceListChanged() error {
+	return s.SendNotification(shared.ResourceListChangedNotificationMethod, nil)
+}
+
+// SendToolListChanged sends a notification to the client indicating that the list of tools has changed.
+func (s *Server) SendToolListChanged() error {
+	return s.SendNotification(shared.ToolListChangedNotificationMethod, nil)
+}
+
+// SendPromptListChanged sends a notification to the client indicating that the list of prompts has changed.
+func (s *Server) SendPromptListChanged() error {
+	return s.SendNotification(shared.NotificationsPromptListChangedMethod, nil)
+}
+
+// RegisteredTool represents a registered tool on the server.
+type RegisteredTool struct {
+	Tool    shared.Tool
+	Handler func(shared.CallToolRequestParams) (shared.CallToolResult, error)
+}
+
+// RegisteredPrompt represents a registered prompt on the server.
+type RegisteredPrompt struct {
+	Prompt          shared.Prompt
+	MessageProvider func(shared.GetPromptRequestParams) shared.GetPromptResult
+}
+
+// RegisteredResource represents a registered resource on the server.
+type RegisteredResource struct {
+	Resource    shared.Resource
+	ReadHandler func(shared.ReadResourceRequestParams) shared.ReadResourceResult
+}
+
+func paginate[T any](requestId jsonrpc.RequestId, items []T, cursor *string) ([]T, *string, *jsonrpc.JSONRPCErrorError) {
+	start := 0
+	end := len(items)
+
+	if cursor != nil {
+		cursor, err := strconv.Atoi(*cursor)
+		if err != nil {
+			return nil, nil, jsonrpc.NewJSONRPCErrorError(requestId, jsonrpc.InvalidParams, "Invalid cursor", nil)
+		}
+		start = cursor
+	}
+
+	// if there are more items than maxListResults, we set nextCursor to the next index
+	// eg: if start = 0 & len(toolList) = 1000, we return toolList[0:100] and nextCursor = "100"
+	if end > start+maxListResults {
+		end = start + maxListResults
+		nextCursorValue := strconv.Itoa(start + maxListResults)
+		cursor = &nextCursorValue
+	}
+
+	return items[start:end], cursor, nil
+}
