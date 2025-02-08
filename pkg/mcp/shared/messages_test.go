@@ -74,7 +74,7 @@ func TestParseResult(t *testing.T) {
 
 		// then
 		require.NoError(t, err)
-		require.Equal(t, expectedResult, messageResult)
+		require.Equal(t, expectedResult, messageResult.AdditionalProperties)
 	})
 }
 
