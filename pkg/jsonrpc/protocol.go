@@ -174,8 +174,17 @@ func (p *Protocol) SendRequestInternal(
 	resChan := make(chan *JSONRPCResponse, 1)
 	errChan := make(chan error, 1)
 
+	select {
+	case <-ctx.Done():
+		fmt.Println("Context is already done before sending request:", ctx.Err())
+		return ctx.Err()
+	default:
+		fmt.Println("Context is not done, proceeding with request")
+	}
+
 	p.responseHandlers[messageID] = func(response *JSONRPCResponse, err error) {
 		if cancelTimeout != nil {
+			fmt.Println("Cancelling timeout")
 			cancelTimeout()
 		}
 
@@ -187,6 +196,7 @@ func (p *Protocol) SendRequestInternal(
 	}
 
 	cancel := func(reason string) {
+		fmt.Printf("Cancelling request: %s\n", reason)
 		delete(p.responseHandlers, messageID)
 
 		if cancelTimeout != nil {
@@ -208,6 +218,9 @@ func (p *Protocol) SendRequestInternal(
 	select {
 	case <-ctx.Done():
 		cancel("context done")
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return nil
+		}
 		return ctx.Err()
 	case err := <-errChan:
 		if errors.Is(err, context.Canceled) {

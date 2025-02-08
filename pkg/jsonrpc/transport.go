@@ -50,7 +50,3 @@ func (t *BaseTransport) Start() error {
 func (t *BaseTransport) Send(message JSONRPCMessage) error {
 	return nil
 }
-
-// type StdioTransport struct{}
-
-// type HTTPTransport struct{}
