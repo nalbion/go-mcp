@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	jsonrpc_client "github.com/nalbion/go-mcp/pkg/jsonrpc/client"
-	"github.com/nalbion/go-mcp/pkg/mcp/shared"
+	"github.com/nalbion/go-mcp/pkg/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,12 +15,12 @@ func TestIntegrationClient(t *testing.T) {
 	// given
 	ctx := context.Background()
 	client := NewClient(ctx,
-		shared.Implementation{
+		mcp.Implementation{
 			Name:    "go-mcp",
 			Version: "0.0.1",
 		},
 		ClientOptions{
-			Capabilities: shared.ClientCapabilities{},
+			Capabilities: mcp.ClientCapabilities{},
 		},
 	)
 
@@ -44,12 +44,34 @@ func TestIntegrationClient(t *testing.T) {
 	err = client.Connect(transport)
 	require.NoError(t, err)
 
-	// then we can list the files in the root directory
-	result := &shared.ListToolsResult{}
-	options := &shared.RequestOptions{
-		// OnProgress: func(progress shared.Progress) {,
-	}
-	err = client.ListTools(shared.ListToolsRequestParams{}, result, options)
-	require.NoError(t, err)
-	require.NotEmpty(t, result.Tools)
+	t.Run("ListTools", func(t *testing.T) {
+		// then we can list the tools provided by the server
+		result := &mcp.ListToolsResult{}
+		err = client.ListTools(mcp.ListToolsRequestParams{}, result, nil)
+		require.NoError(t, err)
+		require.NotEmpty(t, result.Tools)
+	})
+
+	t.Run("directory_tree", func(t *testing.T) {
+		// when we call the directory_tree tool
+		result := &mcp.CallToolResult{}
+		err = client.CallTool(
+			mcp.CallToolRequestParams{
+				Name: "directory_tree",
+				Arguments: mcp.CallToolRequestParamsArguments{
+					"path": "/projects",
+				},
+			}, result, nil)
+
+		// then
+		require.NoError(t, err)
+		require.Len(t, result.Content, 1)
+		if content, ok := result.Content[0].(map[string]any); !ok {
+			t.Fatalf("unexpected content type: %T", result.Content[0])
+		} else {
+			text := content["text"]
+			require.NotEmpty(t, text)
+			// fmt.Println(text)
+		}
+	})
 }

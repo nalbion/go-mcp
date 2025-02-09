@@ -10,6 +10,7 @@ import (
 type Method string
 
 func ParseJSONRPCMessage(content []byte) (JSONRPCMessage, error) {
+	// Logger.Printf("parsing message: %s\n", content)
 	parsed := map[string]interface{}{}
 	err := json.Unmarshal(content, &parsed)
 	if err != nil {

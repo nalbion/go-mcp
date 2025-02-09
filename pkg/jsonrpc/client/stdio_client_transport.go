@@ -74,7 +74,7 @@ func (t *StdioClientTransport) Start() error {
 					continue
 				}
 
-				fmt.Printf("sending message: %s\n", string(jsonMessage))
+				// jsonrpc.Logger.Printf("sending message: %s\n", string(jsonMessage))
 				_, err = io.WriteString(stdin, string(jsonMessage)+"\n")
 				if err != nil {
 					if t.OnError != nil {
@@ -149,7 +149,6 @@ func (t *StdioClientTransport) readServerOutput(reader io.Reader) {
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
-			jsonrpc.Logger.Printf("received chunk: %s\n", string(chunk))
 			t.readBuffer.Append(chunk)
 			t.processReadBuffer()
 		}

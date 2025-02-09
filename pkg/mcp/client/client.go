@@ -6,12 +6,13 @@ import (
 	"slices"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
+	"github.com/nalbion/go-mcp/pkg/mcp"
 	"github.com/nalbion/go-mcp/pkg/mcp/shared"
 )
 
 type ClientOptions struct {
 	// The Capabilities this client supports
-	Capabilities shared.ClientCapabilities
+	Capabilities mcp.ClientCapabilities
 	// Whether to strictly enforce capabilities when interacting with the server
 	// defaults to true
 	EnforceStrictCapabilities *bool
@@ -28,16 +29,16 @@ type ClientOptions struct {
 type Client struct {
 	*shared.Protocol
 	ctx          context.Context
-	clientInfo   shared.Implementation
-	capabilities shared.ClientCapabilities
+	clientInfo   mcp.Implementation
+	capabilities mcp.ClientCapabilities
 	// after the initialization process completes, this will contain the server's capabilities
-	ServerCapabilities *shared.ServerCapabilities
+	ServerCapabilities *mcp.ServerCapabilities
 	ServerVersion      string
 }
 
 func NewClient(
 	ctx context.Context,
-	clientInfo shared.Implementation,
+	clientInfo mcp.Implementation,
 	options ClientOptions,
 ) *Client {
 	enforceStrictCapabilities := true
@@ -75,11 +76,11 @@ func (c *Client) Connect(transport jsonrpc.Transport) error {
 		}
 	}()
 
-	result := &shared.InitializeResult{}
+	result := &mcp.InitializeResult{}
 	err := c.SendRequest(
 		shared.InitializeMethod,
 		&jsonrpc.JSONRPCRequestParams{
-			AdditionalProperties: shared.InitializeRequestParams{
+			AdditionalProperties: mcp.InitializeRequestParams{
 				ProtocolVersion: shared.LatestProtocolVersion,
 				Capabilities:    c.capabilities,
 				ClientInfo:      c.clientInfo,
@@ -97,7 +98,8 @@ func (c *Client) Connect(transport jsonrpc.Transport) error {
 		return fmt.Errorf("server's protocol version is not supported: %s", result.ProtocolVersion)
 	}
 
-	shared.Logger.Printf("Connected to server: %v\n", result)
+	connected = true
+	shared.Logger.Printf("Connected to MCP server: %s\n", result.ServerInfo.Name)
 
 	c.ServerCapabilities = &result.Capabilities
 	c.ServerVersion = result.ServerInfo.Version
@@ -111,13 +113,13 @@ func (c *Client) Connect(transport jsonrpc.Transport) error {
 }
 
 // Ping() sends a ping request to the server to check connectivity.
-func (c *Client) Ping(options *shared.RequestOptions) error {
+func (c *Client) Ping(options *mcp.RequestOptions) error {
 	return c.SendRequest(shared.PingMethod, nil, nil, options)
 }
 
 // Complate() sends a completion request to the server, typically to generate or complete some content
 // returns the completion result returned by the server, or `null` if none.
-func (c *Client) Complete(params shared.CompleteRequestParams, result *shared.CompleteResult, options *shared.RequestOptions) error {
+func (c *Client) Complete(params mcp.CompleteRequestParams, result *mcp.CompleteResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.CompletionCompleteMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -130,16 +132,16 @@ func (c *Client) Complete(params shared.CompleteRequestParams, result *shared.Co
 }
 
 // SetLogggingLevel() sets the logging level on the server.
-func (c *Client) SetLogggingLevel(level shared.LoggingLevel, options *shared.RequestOptions) error {
+func (c *Client) SetLogggingLevel(level mcp.LoggingLevel, options *mcp.RequestOptions) error {
 	return c.SendRequest(shared.LoggingSetLevelMethod, &jsonrpc.JSONRPCRequestParams{
-		AdditionalProperties: shared.SetLevelRequestParams{
+		AdditionalProperties: mcp.SetLevelRequestParams{
 			Level: level,
 		},
 	}, nil, options)
 }
 
 // Lists all available prompts from the server.
-func (c *Client) ListPrompts(params shared.ListPromptsRequestParams, result *shared.ListPromptsResult, options *shared.RequestOptions) error {
+func (c *Client) ListPrompts(params mcp.ListPromptsRequestParams, result *mcp.ListPromptsResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.ListPromptsMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -153,7 +155,7 @@ func (c *Client) ListPrompts(params shared.ListPromptsRequestParams, result *sha
 
 // GetPrompt() retrieves a prompt by name from the server.
 // returns the requested prompt details, or `null` if not found
-func (c *Client) GetPrompt(params shared.GetPromptRequestParams, result *shared.GetPromptResult, options *shared.RequestOptions) error {
+func (c *Client) GetPrompt(params mcp.GetPromptRequestParams, result *mcp.GetPromptResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.GetPromptsMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -165,7 +167,7 @@ func (c *Client) GetPrompt(params shared.GetPromptRequestParams, result *shared.
 		options)
 }
 
-func (c *Client) ListResources(params shared.ListResourcesRequestParams, result *shared.ListResourcesResult, options *shared.RequestOptions) error {
+func (c *Client) ListResources(params mcp.ListResourcesRequestParams, result *mcp.ListResourcesResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.ListResourcesMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -177,7 +179,7 @@ func (c *Client) ListResources(params shared.ListResourcesRequestParams, result 
 		options)
 }
 
-func (c *Client) ListResourceTemplates(params shared.ListResourceTemplatesRequestParams, result *shared.ListResourceTemplatesResult, options *shared.RequestOptions) error {
+func (c *Client) ListResourceTemplates(params mcp.ListResourceTemplatesRequestParams, result *mcp.ListResourceTemplatesResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.ListResourcesTemplatesMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -189,7 +191,7 @@ func (c *Client) ListResourceTemplates(params shared.ListResourceTemplatesReques
 		options)
 }
 
-func (c *Client) ReadResource(params shared.ReadResourceRequestParams, result *shared.ReadResourceResult, options *shared.RequestOptions) error {
+func (c *Client) ReadResource(params mcp.ReadResourceRequestParams, result *mcp.ReadResourceResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.ReadResourcesMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -201,7 +203,7 @@ func (c *Client) ReadResource(params shared.ReadResourceRequestParams, result *s
 		options)
 }
 
-func (c *Client) SubscribeResources(params shared.SubscribeRequestParams, options *shared.RequestOptions) error {
+func (c *Client) SubscribeResources(params mcp.SubscribeRequestParams, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.ResourcesSubscribeMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -211,13 +213,13 @@ func (c *Client) SubscribeResources(params shared.SubscribeRequestParams, option
 		options)
 }
 
-func (c *Client) UnsubscribeResources(params shared.UnsubscribeRequestParams, options *shared.RequestOptions) error {
+func (c *Client) UnsubscribeResources(params mcp.UnsubscribeRequestParams, options *mcp.RequestOptions) error {
 	return c.SendRequest(shared.ResourcesUnsubscribeMethod, &jsonrpc.JSONRPCRequestParams{
 		AdditionalProperties: params,
 	}, nil, options)
 }
 
-func (c *Client) ListTools(params shared.ListToolsRequestParams, result *shared.ListToolsResult, options *shared.RequestOptions) error {
+func (c *Client) ListTools(params mcp.ListToolsRequestParams, result *mcp.ListToolsResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.ToolsListMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -229,7 +231,7 @@ func (c *Client) ListTools(params shared.ListToolsRequestParams, result *shared.
 		options)
 }
 
-func (c *Client) CallTool(params shared.CallToolRequestParams, result *shared.CallToolResult, options *shared.RequestOptions) error {
+func (c *Client) CallTool(params mcp.CallToolRequestParams, result *mcp.CallToolResult, options *mcp.RequestOptions) error {
 	return c.SendRequest(
 		shared.ToolsCallMethod,
 		&jsonrpc.JSONRPCRequestParams{
@@ -241,7 +243,7 @@ func (c *Client) CallTool(params shared.CallToolRequestParams, result *shared.Ca
 		options)
 }
 
-func (c *Client) SendRootsListChangedNotification(params shared.RootsListChangedNotification) error {
+func (c *Client) SendRootsListChangedNotification(params mcp.RootsListChangedNotification) error {
 	return c.SendNotification(shared.NotificationsRootsListChangedMethod, &jsonrpc.JSONRPCNotificationParams{
 		AdditionalProperties: params,
 	})
@@ -336,7 +338,7 @@ func (c *Client) SendRequest(
 	method jsonrpc.Method,
 	params *jsonrpc.JSONRPCRequestParams,
 	result *jsonrpc.Result,
-	options *shared.RequestOptions,
+	options *mcp.RequestOptions,
 ) error {
 	return c.Protocol.SendRequest(
 		c.ctx,
@@ -351,21 +353,21 @@ func (c *Client) SendRequest(
 
 // func RunClient(ctx context.Context, urlOrCommand string, args []string) {
 // 	client := NewClient(ctx,
-// 		shared.Implementation{
+// 		mcp.Implementation{
 // 			Name:    "mcp test client",
 // 			Version: "0.1.0",
 // 		},
 // 		ClientOptions{
-// 			Capabilities: shared.ClientCapabilities{
-// 				Sampling: shared.ClientCapabilitiesSampling{},
+// 			Capabilities: mcp.ClientCapabilities{
+// 				Sampling: mcp.ClientCapabilitiesSampling{},
 // 			},
 // 		})
 
-// 	var clientTransport shared.Transport
+// 	var clientTransport mcp.Transport
 
 // 	// if urlOrCommand == "" {
-// 	// 	var serverTransport shared.Transport
-// 	// 	clientTransport, serverTransport = shared.NewClientServerInMemoryTransports()
+// 	// 	var serverTransport mcp.Transport
+// 	// 	clientTransport, serverTransport = mcp.NewClientServerInMemoryTransports()
 // 	// 	serverTransport.Start()
 // 	// }
 

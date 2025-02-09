@@ -196,7 +196,7 @@ func (p *Protocol) SendRequestInternal(
 		}
 
 		if cancelTimeout != nil {
-			fmt.Println("Cancelling timeout")
+			Logger.Println("Cancelling timeout")
 			cancelTimeout()
 		}
 	}

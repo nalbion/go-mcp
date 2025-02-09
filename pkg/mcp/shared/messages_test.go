@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
+	"github.com/nalbion/go-mcp/pkg/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,22 +37,22 @@ func TestParseResult(t *testing.T) {
 	err := json.Unmarshal(jsonResult, &result)
 	require.NoError(t, err)
 
-	expectedResult := InitializeResult{
+	expectedResult := mcp.InitializeResult{
 		ProtocolVersion: "2024-11-05",
-		Capabilities: ServerCapabilities{
-			Logging: ServerCapabilitiesLogging{},
-			Prompts: &ServerCapabilitiesPrompts{
+		Capabilities: mcp.ServerCapabilities{
+			Logging: mcp.ServerCapabilitiesLogging{},
+			Prompts: &mcp.ServerCapabilitiesPrompts{
 				ListChanged: &trueVal,
 			},
-			Resources: &ServerCapabilitiesResources{
+			Resources: &mcp.ServerCapabilitiesResources{
 				Subscribe:   &trueVal,
 				ListChanged: &trueVal,
 			},
-			Tools: &ServerCapabilitiesTools{
+			Tools: &mcp.ServerCapabilitiesTools{
 				ListChanged: &trueVal,
 			},
 		},
-		ServerInfo: Implementation{
+		ServerInfo: mcp.Implementation{
 			Name:    "ExampleServer",
 			Version: "1.0.0",
 		},
@@ -68,7 +69,7 @@ func TestParseResult(t *testing.T) {
 	t.Run("empty responseMessage", func(t *testing.T) {
 		// when
 		messageResult := jsonrpc.Result{
-			AdditionalProperties: InitializeResult{},
+			AdditionalProperties: mcp.InitializeResult{},
 		}
 		err := jsonrpc.ParseResult(jsonResult, &messageResult)
 
@@ -79,60 +80,60 @@ func TestParseResult(t *testing.T) {
 }
 
 func TestParseJSONRPCMessage(t *testing.T) {
-// 	t.Run("request message", func(t *testing.T) {
-// 		// given
-// 		jsonRequest := []byte(`{
-//   "jsonrpc": "2.0",
-//   "id": 1,
-//   "method": "initialize",
-//   "params": {
-//     "protocolVersion": "2024-11-05",
-//     "capabilities": {
-//       "roots": {
-//         "listChanged": true
-//       },
-//       "sampling": {}
-//     },
-//     "clientInfo": {
-//       "name": "ExampleClient",
-//       "version": "1.0.0"
-//     }
-//   }
-// }`)
+	// 	t.Run("request message", func(t *testing.T) {
+	// 		// given
+	// 		jsonRequest := []byte(`{
+	//   "jsonrpc": "2.0",
+	//   "id": 1,
+	//   "method": "initialize",
+	//   "params": {
+	//     "protocolVersion": "2024-11-05",
+	//     "capabilities": {
+	//       "roots": {
+	//         "listChanged": true
+	//       },
+	//       "sampling": {}
+	//     },
+	//     "clientInfo": {
+	//       "name": "ExampleClient",
+	//       "version": "1.0.0"
+	//     }
+	//   }
+	// }`)
 
-// 		trueVal := true
-// 		expectedRequest := jsonrpc.JSONRPCRequest{
-// 			Jsonrpc: "2.0",
-// 			Id:      1,
-// 			Method:  "initialize",
-// 			Params: &jsonrpc.JSONRPCRequestParams{
-// 				// JSONRPCRequestParamsMeta only allows ProgressToken?
-// 				// Meta: map[string]interface{}{
-// 				// 	"foo": "bar",
-// 				// },
-// 				AdditionalProperties: InitializeRequestParams{
-// 					ProtocolVersion: "2024-11-05",
-// 					Capabilities: ClientCapabilities{
-// 						Roots: &ClientCapabilitiesRoots{
-// 							ListChanged: &trueVal,
-// 						},
-// 						Sampling: ClientCapabilitiesSampling{},
-// 					},
-// 					ClientInfo: Implementation{
-// 						Name:    "ExampleClient",
-// 						Version: "1.0.0",
-// 					},
-// 				},
-// 			},
-// 		}
+	// 		trueVal := true
+	// 		expectedRequest := jsonrpc.JSONRPCRequest{
+	// 			Jsonrpc: "2.0",
+	// 			Id:      1,
+	// 			Method:  "initialize",
+	// 			Params: &jsonrpc.JSONRPCRequestParams{
+	// 				// JSONRPCRequestParamsMeta only allows ProgressToken?
+	// 				// Meta: map[string]interface{}{
+	// 				// 	"foo": "bar",
+	// 				// },
+	// 				AdditionalProperties: InitializeRequestParams{
+	// 					ProtocolVersion: "2024-11-05",
+	// 					Capabilities: ClientCapabilities{
+	// 						Roots: &ClientCapabilitiesRoots{
+	// 							ListChanged: &trueVal,
+	// 						},
+	// 						Sampling: ClientCapabilitiesSampling{},
+	// 					},
+	// 					ClientInfo: Implementation{
+	// 						Name:    "ExampleClient",
+	// 						Version: "1.0.0",
+	// 					},
+	// 				},
+	// 			},
+	// 		}
 
-// 		message, err := jsonrpc.ParseJSONRPCMessage(jsonRequest)
-// 		require.IsType(t, message, &jsonrpc.JSONRPCRequest{})
+	// 		message, err := jsonrpc.ParseJSONRPCMessage(jsonRequest)
+	// 		require.IsType(t, message, &jsonrpc.JSONRPCRequest{})
 
-// 		// then
-// 		require.NoError(t, err)
-// 		require.Equal(t, expectedRequest, *message.(*jsonrpc.JSONRPCRequest))
-// 	})
+	// 		// then
+	// 		require.NoError(t, err)
+	// 		require.Equal(t, expectedRequest, *message.(*jsonrpc.JSONRPCRequest))
+	// 	})
 
 	// 	t.Run("response message", func(t *testing.T) {
 	// 		// given
@@ -201,33 +202,33 @@ func TestParseJSONRPCMessage(t *testing.T) {
 	// 		require.Equal(t, "bar", message.(JSONRPCResponse).Result.Meta["foo"])
 	// 	})
 
-// 	t.Run("notification message", func(t *testing.T) {
-// 		// given
-// 		jsonNotification := []byte(`{
-// 	"jsonrpc": "2.0",
-// 	"method": "notifications/cancelled",
-//     "params": {
-//       "requestId": 123,
-//       "reason": "User requested cancellation"
-//     }
-//   }`)
+	// 	t.Run("notification message", func(t *testing.T) {
+	// 		// given
+	// 		jsonNotification := []byte(`{
+	// 	"jsonrpc": "2.0",
+	// 	"method": "notifications/cancelled",
+	//     "params": {
+	//       "requestId": 123,
+	//       "reason": "User requested cancellation"
+	//     }
+	//   }`)
 
-// 		reason := "User requested cancellation"
-// 		expectedNotification := jsonrpc.JSONRPCNotification{
-// 			Jsonrpc: "2.0",
-// 			Method:  "notifications/cancelled",
-// 			Params: &jsonrpc.JSONRPCNotificationParams{
-// 				AdditionalProperties: map[string]interface{}{
-// 					"requestId": float64(123),
-// 					"reason":    reason,
-// 				},
-// 			},
-// 		}
+	// 		reason := "User requested cancellation"
+	// 		expectedNotification := jsonrpc.JSONRPCNotification{
+	// 			Jsonrpc: "2.0",
+	// 			Method:  "notifications/cancelled",
+	// 			Params: &jsonrpc.JSONRPCNotificationParams{
+	// 				AdditionalProperties: map[string]interface{}{
+	// 					"requestId": float64(123),
+	// 					"reason":    reason,
+	// 				},
+	// 			},
+	// 		}
 
-// 		notification, err := jsonrpc.ParseJSONRPCMessage(jsonNotification)
+	// 		notification, err := jsonrpc.ParseJSONRPCMessage(jsonNotification)
 
-// 		// then
-// 		require.NoError(t, err)
-// 		require.Equal(t, expectedNotification, *notification.(*jsonrpc.JSONRPCNotification))
-// 	})
+	//		// then
+	//		require.NoError(t, err)
+	//		require.Equal(t, expectedNotification, *notification.(*jsonrpc.JSONRPCNotification))
+	//	})
 }

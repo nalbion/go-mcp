@@ -8,12 +8,13 @@ import (
 	"strconv"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
+	"github.com/nalbion/go-mcp/pkg/mcp"
 	"github.com/nalbion/go-mcp/pkg/mcp/shared"
 )
 
 type ServerOptions struct {
 	shared.ProtocolOptions
-	Capabilities shared.ServerCapabilities
+	Capabilities mcp.ServerCapabilities
 }
 
 func NewServerOptions() ServerOptions {
@@ -32,11 +33,11 @@ func NewServerOptions() ServerOptions {
 type Server struct {
 	*shared.Protocol
 	ctx                context.Context
-	serverInfo         shared.Implementation
+	serverInfo         mcp.Implementation
 	options            *ServerOptions
-	clientCapabilities *shared.ClientCapabilities
-	clientVersion      *shared.Implementation
-	capabilities       shared.ServerCapabilities
+	clientCapabilities *mcp.ClientCapabilities
+	clientVersion      *mcp.Implementation
+	capabilities       mcp.ServerCapabilities
 	tools              map[string]RegisteredTool
 	prompts            map[string]RegisteredPrompt
 	resources          map[string]RegisteredResource
@@ -44,7 +45,7 @@ type Server struct {
 	// onClose            func()
 }
 
-func NewServer(ctx context.Context, serverInfo shared.Implementation, options *ServerOptions) *Server {
+func NewServer(ctx context.Context, serverInfo mcp.Implementation, options *ServerOptions) *Server {
 	s := &Server{
 		Protocol:     shared.NewProtocol(ctx, &options.ProtocolOptions),
 		ctx:          ctx,
@@ -87,7 +88,7 @@ func NewServer(ctx context.Context, serverInfo shared.Implementation, options *S
 func (s *Server) handleInitialize(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	shared.Logger.Printf("Handling initialize request from client: %v", request.Params)
 
-	if initParams, ok := request.Params.AdditionalProperties.(shared.InitializeRequestParams); !ok {
+	if initParams, ok := request.Params.AdditionalProperties.(mcp.InitializeRequestParams); !ok {
 		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid initialize request parameters", nil)
 	} else {
 		s.clientCapabilities = &initParams.Capabilities
@@ -101,7 +102,7 @@ func (s *Server) handleInitialize(ctx context.Context, request *jsonrpc.JSONRPCR
 		}
 
 		return jsonrpc.Result{
-			AdditionalProperties: shared.InitializeResult{
+			AdditionalProperties: mcp.InitializeResult{
 				ProtocolVersion: "1.0",
 				Capabilities:    s.capabilities,
 				ServerInfo:      s.serverInfo,
@@ -127,13 +128,13 @@ const maxListResults = 100
 
 func (s *Server) handleListTools(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	shared.Logger.Printf("Handling list tools request from client: %v", request.Params)
-	toolList := make([]shared.Tool, 0, len(s.tools))
+	toolList := make([]mcp.Tool, 0, len(s.tools))
 	for _, tool := range s.tools {
 		toolList = append(toolList, tool.Tool)
 	}
 
 	var cursor *string
-	if listParams, ok := request.Params.AdditionalProperties.(shared.ListToolsRequestParams); ok {
+	if listParams, ok := request.Params.AdditionalProperties.(mcp.ListToolsRequestParams); ok {
 		cursor = listParams.Cursor
 	}
 
@@ -143,7 +144,7 @@ func (s *Server) handleListTools(ctx context.Context, request *jsonrpc.JSONRPCRe
 	}
 
 	return jsonrpc.Result{
-		AdditionalProperties: shared.ListToolsResult{
+		AdditionalProperties: mcp.ListToolsResult{
 			Tools:      toolList,
 			NextCursor: nextCursor,
 		},
@@ -152,13 +153,13 @@ func (s *Server) handleListTools(ctx context.Context, request *jsonrpc.JSONRPCRe
 
 func (s *Server) handleListPrompts(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	shared.Logger.Printf("Handling list prompts request from client: %v", request.Params)
-	promptList := make([]shared.Prompt, 0, len(s.prompts))
+	promptList := make([]mcp.Prompt, 0, len(s.prompts))
 	for _, prompt := range s.prompts {
 		promptList = append(promptList, prompt.Prompt)
 	}
 
 	var cursor *string
-	if listParams, ok := request.Params.AdditionalProperties.(shared.ListPromptsRequestParams); ok {
+	if listParams, ok := request.Params.AdditionalProperties.(mcp.ListPromptsRequestParams); ok {
 		cursor = listParams.Cursor
 	}
 
@@ -168,7 +169,7 @@ func (s *Server) handleListPrompts(ctx context.Context, request *jsonrpc.JSONRPC
 	}
 
 	return jsonrpc.Result{
-		AdditionalProperties: shared.ListPromptsResult{
+		AdditionalProperties: mcp.ListPromptsResult{
 			Prompts:    promptList,
 			NextCursor: nextCursor,
 		},
@@ -177,13 +178,13 @@ func (s *Server) handleListPrompts(ctx context.Context, request *jsonrpc.JSONRPC
 
 func (s *Server) handleListResources(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	shared.Logger.Printf("Handling list resources request from client: %v", request.Params)
-	resourceList := make([]shared.Resource, 0, len(s.resources))
+	resourceList := make([]mcp.Resource, 0, len(s.resources))
 	for _, resource := range s.resources {
 		resourceList = append(resourceList, resource.Resource)
 	}
 
 	var cursor *string
-	if listParams, ok := request.Params.AdditionalProperties.(shared.ListResourcesRequestParams); ok {
+	if listParams, ok := request.Params.AdditionalProperties.(mcp.ListResourcesRequestParams); ok {
 		cursor = listParams.Cursor
 	}
 
@@ -193,7 +194,7 @@ func (s *Server) handleListResources(ctx context.Context, request *jsonrpc.JSONR
 	}
 
 	return jsonrpc.Result{
-		AdditionalProperties: shared.ListResourcesResult{
+		AdditionalProperties: mcp.ListResourcesResult{
 			Resources:  resourceList,
 			NextCursor: nextCursor,
 		},
@@ -203,7 +204,7 @@ func (s *Server) handleListResources(ctx context.Context, request *jsonrpc.JSONR
 func (s *Server) handleCallTool(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	shared.Logger.Printf("Handling call tool request from client: %v", request.Params)
 
-	if callParams, ok := request.Params.AdditionalProperties.(shared.CallToolRequestParams); !ok {
+	if callParams, ok := request.Params.AdditionalProperties.(mcp.CallToolRequestParams); !ok {
 		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid call tool request parameters", nil)
 	} else {
 		if tool, ok := s.tools[callParams.Name]; !ok {
@@ -223,7 +224,7 @@ func (s *Server) handleCallTool(ctx context.Context, request *jsonrpc.JSONRPCReq
 func (s *Server) handleGetPrompt(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	shared.Logger.Printf("Handling get prompt request from client: %v", request.Params)
 
-	if getParams, ok := request.Params.AdditionalProperties.(shared.GetPromptRequestParams); !ok {
+	if getParams, ok := request.Params.AdditionalProperties.(mcp.GetPromptRequestParams); !ok {
 		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid get prompt request parameters", nil)
 	} else {
 		if prompt, ok := s.prompts[getParams.Name]; !ok {
@@ -240,7 +241,7 @@ func (s *Server) handleGetPrompt(ctx context.Context, request *jsonrpc.JSONRPCRe
 func (s *Server) handleReadResource(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	shared.Logger.Printf("Handling read resource request from client: %v", request.Params)
 
-	if readParams, ok := request.Params.AdditionalProperties.(shared.ReadResourceRequestParams); !ok {
+	if readParams, ok := request.Params.AdditionalProperties.(mcp.ReadResourceRequestParams); !ok {
 		return jsonrpc.Result{}, jsonrpc.NewJSONRPCErrorError(request.Id, jsonrpc.InvalidParams, "Invalid read resource request parameters", nil)
 	} else {
 		if resource, ok := s.resources[readParams.Uri]; !ok {
@@ -326,8 +327,8 @@ func (c *Server) AssertRequestHandlerCapability(method jsonrpc.Method) error {
 func (s *Server) AddTool(
 	name string,
 	description string,
-	inputSchema shared.ToolInputSchema,
-	handler func(shared.CallToolRequestParams) (shared.CallToolResult, error),
+	inputSchema mcp.ToolInputSchema,
+	handler func(mcp.CallToolRequestParams) (mcp.CallToolResult, error),
 ) error {
 	if s.capabilities.Tools == nil {
 		return errors.New("Server does not support tools capability. Enable it in ServerOptions.")
@@ -335,7 +336,7 @@ func (s *Server) AddTool(
 
 	shared.Logger.Printf("Registering tool %s", name)
 	s.tools[name] = RegisteredTool{
-		Tool: shared.Tool{
+		Tool: mcp.Tool{
 			Name:        name,
 			Description: &description,
 			InputSchema: inputSchema,
@@ -362,7 +363,7 @@ func (s *Server) AddTools(toolsToAdd []RegisteredTool) error {
 }
 
 // AddPrompt registers a single prompt. The prompt can then be retrieved by the client.
-func (s *Server) AddPrompt(prompt shared.Prompt, promptProvider func(shared.GetPromptRequestParams) shared.GetPromptResult) error {
+func (s *Server) AddPrompt(prompt mcp.Prompt, promptProvider func(mcp.GetPromptRequestParams) mcp.GetPromptResult) error {
 	if s.capabilities.Prompts == nil {
 		return errors.New("Server does not support prompts capability.")
 	}
@@ -397,7 +398,7 @@ func (s *Server) AddResource(
 	name string,
 	description *string,
 	mimeType *string,
-	readHandler func(shared.ReadResourceRequestParams) shared.ReadResourceResult,
+	readHandler func(mcp.ReadResourceRequestParams) mcp.ReadResourceResult,
 ) error {
 	if s.capabilities.Resources == nil {
 		return errors.New("Server does not support resources capability.")
@@ -405,7 +406,7 @@ func (s *Server) AddResource(
 
 	shared.Logger.Printf("Registering resource %s at %s", name, uri)
 	s.resources[uri] = RegisteredResource{
-		Resource: shared.Resource{
+		Resource: mcp.Resource{
 			Uri:         uri,
 			Name:        name,
 			Description: description,
@@ -438,8 +439,8 @@ func (s *Server) Ping() error {
 }
 
 // CreateMessage creates a message using the server's sampling capability.
-func (s *Server) CreateMessage(params shared.CreateMessageRequestParams, options *shared.RequestOptions) (*shared.CreateMessageResult, error) {
-	result := &shared.CreateMessageResult{}
+func (s *Server) CreateMessage(params mcp.CreateMessageRequestParams, options *mcp.RequestOptions) (*mcp.CreateMessageResult, error) {
+	result := &mcp.CreateMessageResult{}
 
 	err := s.SendRequest(
 		s.ctx,
@@ -456,8 +457,8 @@ func (s *Server) CreateMessage(params shared.CreateMessageRequestParams, options
 }
 
 // ListRoots lists the available "roots" from the client's perspective (if supported).
-func (s *Server) ListRoots(options *shared.RequestOptions) (*shared.ListRootsResult, error) {
-	result := &shared.ListRootsResult{}
+func (s *Server) ListRoots(options *mcp.RequestOptions) (*mcp.ListRootsResult, error) {
+	result := &mcp.ListRootsResult{}
 
 	err := s.SendRequest(
 		s.ctx,
@@ -472,7 +473,7 @@ func (s *Server) ListRoots(options *shared.RequestOptions) (*shared.ListRootsRes
 }
 
 // SendLoggingMessage sends a logging message notification to the client.
-func (s *Server) SendLoggingMessage(params shared.LoggingMessageNotificationParams) error {
+func (s *Server) SendLoggingMessage(params mcp.LoggingMessageNotificationParams) error {
 	return s.SendNotification(
 		shared.LoggingMessageNotificationMethod,
 		&jsonrpc.JSONRPCNotificationParams{
@@ -482,7 +483,7 @@ func (s *Server) SendLoggingMessage(params shared.LoggingMessageNotificationPara
 }
 
 // SendResourceUpdated sends a resource-updated notification to the client.
-func (s *Server) SendResourceUpdated(params shared.ResourceUpdatedNotificationParams) error {
+func (s *Server) SendResourceUpdated(params mcp.ResourceUpdatedNotificationParams) error {
 	return s.SendNotification(
 		shared.ResourceUpdatedNotificationMethod,
 		&jsonrpc.JSONRPCNotificationParams{
@@ -508,20 +509,20 @@ func (s *Server) SendPromptListChanged() error {
 
 // RegisteredTool represents a registered tool on the server.
 type RegisteredTool struct {
-	Tool    shared.Tool
-	Handler func(shared.CallToolRequestParams) (shared.CallToolResult, error)
+	Tool    mcp.Tool
+	Handler func(mcp.CallToolRequestParams) (mcp.CallToolResult, error)
 }
 
 // RegisteredPrompt represents a registered prompt on the server.
 type RegisteredPrompt struct {
-	Prompt          shared.Prompt
-	MessageProvider func(shared.GetPromptRequestParams) shared.GetPromptResult
+	Prompt          mcp.Prompt
+	MessageProvider func(mcp.GetPromptRequestParams) mcp.GetPromptResult
 }
 
 // RegisteredResource represents a registered resource on the server.
 type RegisteredResource struct {
-	Resource    shared.Resource
-	ReadHandler func(shared.ReadResourceRequestParams) shared.ReadResourceResult
+	Resource    mcp.Resource
+	ReadHandler func(mcp.ReadResourceRequestParams) mcp.ReadResourceResult
 }
 
 func paginate[T any](requestId jsonrpc.RequestId, items []T, cursor *string) ([]T, *string, *jsonrpc.JSONRPCErrorError) {

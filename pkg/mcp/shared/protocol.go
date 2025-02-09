@@ -8,13 +8,10 @@ import (
 	"time"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
+	"github.com/nalbion/go-mcp/pkg/mcp"
 )
 
 const DEFAULT_REQUEST_TIMEOUT = 1 * time.Minute
-
-type (
-	ProgressHandler func(progress ProgressNotificationParams)
-)
 
 type ProtocolOptions struct {
 	// Whether to restrict emitted requests to only those that the remote side has indicated that they can handle, through their advertised capabilities.
@@ -27,7 +24,7 @@ type ProtocolOptions struct {
 type Protocol struct {
 	jsonrpc.Protocol
 	options                 *ProtocolOptions
-	progressHandlers        map[int]ProgressHandler
+	progressHandlers        map[int]mcp.ProgressHandler
 	requestAbortControllers sync.Map
 }
 
@@ -40,7 +37,7 @@ func NewProtocol(ctx context.Context, options *ProtocolOptions) *Protocol {
 	p.Protocol.RemoveResponseHandler = p.removeResponseHandler
 
 	p.Protocol.SetNotificationHandler(NotificationsCancelledMethod, func(notification *jsonrpc.JSONRPCNotification) error {
-		if cancelled, ok := notification.Params.AdditionalProperties.(CancelledNotificationParams); ok {
+		if cancelled, ok := notification.Params.AdditionalProperties.(mcp.CancelledNotificationParams); ok {
 			p.cancelRequest(cancelled.RequestId)
 			return nil
 		}
@@ -53,7 +50,7 @@ func NewProtocol(ctx context.Context, options *ProtocolOptions) *Protocol {
 
 func (p *Protocol) Connect(ctx context.Context, transport jsonrpc.Transport) error {
 	p.Protocol.SetNotificationHandler(NotificationsProgressMethod, func(notification *jsonrpc.JSONRPCNotification) error {
-		if progress, ok := notification.Params.AdditionalProperties.(ProgressNotificationParams); ok {
+		if progress, ok := notification.Params.AdditionalProperties.(mcp.ProgressNotificationParams); ok {
 			return p.onProgress(progress)
 		}
 
@@ -70,23 +67,12 @@ func (p *Protocol) Connect(ctx context.Context, transport jsonrpc.Transport) err
 	return nil
 }
 
-type RequestOptions struct {
-	// If set, requests progress notifications from the remote end (if supported).
-	// When progress notifications are received, this callback will be invoked.
-	OnProgress ProgressHandler
-	// Can be used to Cancel an in-flight request. This will cause an context.Canceled to be returned from SendRequest().
-	Cancel context.CancelFunc
-	// A Timeout for this request. If exceeded, an McpError with code `RequestTimeout` will be returned from SendRequest().
-	// If not specified, `DEFAULT_REQUEST_TIMEOUT` will be used as the Timeout.
-	Timeout time.Duration
-}
-
 func (p *Protocol) SendRequest(
 	ctx context.Context,
 	method jsonrpc.Method,
 	params *jsonrpc.JSONRPCRequestParams,
 	result *jsonrpc.Result,
-	options *RequestOptions,
+	options *mcp.RequestOptions,
 ) error {
 	if !p.Protocol.IsConnected() {
 		return errors.New("not connected")
@@ -106,7 +92,7 @@ func (p *Protocol) SendRequest(
 		if jsonrpcRequest.Params.Meta == nil {
 			jsonrpcRequest.Params.Meta = &jsonrpc.JSONRPCRequestParamsMeta{}
 		}
-		progressToken := ProgressToken(messageID)
+		progressToken := mcp.ProgressToken(messageID)
 		// If specified, the caller is requesting out-of-band progress notifications for
 		// this request (as represented by notifications/progress). The value of this
 		// parameter is an opaque token that will be attached to any subsequent
@@ -159,7 +145,7 @@ func (p *Protocol) cancelRequest(id jsonrpc.RequestId) {
 	}
 }
 
-func (p *Protocol) onProgress(notification ProgressNotificationParams) error {
+func (p *Protocol) onProgress(notification mcp.ProgressNotificationParams) error {
 	progressToken := notification.ProgressToken
 
 	handler := p.progressHandlers[int(progressToken)]

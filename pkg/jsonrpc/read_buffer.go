@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -47,17 +48,22 @@ func (rb *ReadBuffer) ReadMessage() (JSONRPCMessage, error) {
 			return nil, errors.New("read buffer has been closed")
 		}
 
-		header, err := rb.buffer.ReadString('\n')
+		line, err := rb.buffer.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				Logger.Println("EOF - closed connection")
-			} else {
-				Logger.Printf("failed to read header: %s\n", err)
+				if len(line) != 0 {
+					// there is more to come
+					rb.buffer.WriteString(line)
+					// } else {
+					// 	Logger.Println("ReadMessage() reached EOF")
+				}
+
+				return nil, nil
 			}
-			return nil, err
+			return nil, fmt.Errorf("failed to read header: %s", err)
 		}
 
-		if len(header) <= 2 {
+		if len(line) <= 2 {
 			// empty line before the JSON response
 			if contentLength == 0 {
 				continue
@@ -65,17 +71,17 @@ func (rb *ReadBuffer) ReadMessage() (JSONRPCMessage, error) {
 			break
 		}
 
-		if header[0] == '{' {
-			content = []byte(header)
+		if line[0] == '{' {
+			content = []byte(line)
 			break
 		}
 
-		if !strings.HasPrefix(header, "Content-Length: ") {
+		if !strings.HasPrefix(line, "Content-Length: ") {
 			// some servers send multiple headers, Content-Type is officially supported by LSP
 			continue
 		}
 
-		contentLength, err = strconv.ParseInt(header[16:len(header)-2], 10, 32)
+		contentLength, err = strconv.ParseInt(line[16:len(line)-2], 10, 32)
 		if err != nil {
 			Logger.Printf("failed to parse Content-Length: %s\n", err)
 			return nil, err

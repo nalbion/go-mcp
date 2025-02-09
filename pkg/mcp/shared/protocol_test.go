@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
+	"github.com/nalbion/go-mcp/pkg/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,8 +16,8 @@ func TestRemoveResponseHandler(t *testing.T) {
 	ctx := context.Background()
 	p := NewProtocol(ctx, &ProtocolOptions{})
 	// messageReceived := false
-	p.progressHandlers = map[int]ProgressHandler{
-		1: func(progress ProgressNotificationParams) {
+	p.progressHandlers = map[int]mcp.ProgressHandler{
+		1: func(progress mcp.ProgressNotificationParams) {
 			// messageReceived = true
 		},
 	}
