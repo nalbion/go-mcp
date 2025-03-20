@@ -20,7 +20,7 @@ type ServerOptions struct {
 	Capabilities mcp.ServerCapabilities
 	// Instructions provides optional instructions to clients
 	Instructions string
-	Logger shared.MCPLogger
+	Logger       shared.MCPLogger
 }
 
 func NewServerOptions() ServerOptions {
@@ -29,7 +29,7 @@ func NewServerOptions() ServerOptions {
 			EnforceStrictCapabilities: true,
 		},
 		Capabilities: mcp.ServerCapabilities{},
-		Logger: shared.DefaultLogger,
+		Logger:       shared.DefaultLogger,
 	}
 }
 
@@ -46,21 +46,21 @@ type Server struct {
 	clientVersion      *mcp.Implementation
 	capabilities       mcp.ServerCapabilities
 	instructions       string
-	
-	tools              map[string]RegisteredTool
-	prompts            map[string]RegisteredPrompt
-	resources          map[string]RegisteredResource
-	resourceTemplates  map[string]RegisteredResourceTemplate
-	
-	onInitialized      jsonrpc.NotificationHandler
-	onClose            func()
-	
-	toolsMutex         sync.RWMutex
-	promptsMutex       sync.RWMutex
-	resourcesMutex     sync.RWMutex
-	templatesMutex     sync.RWMutex
-	
-	logger             shared.MCPLogger
+
+	tools             map[string]RegisteredTool
+	prompts           map[string]RegisteredPrompt
+	resources         map[string]RegisteredResource
+	resourceTemplates map[string]RegisteredResourceTemplate
+
+	onInitialized jsonrpc.NotificationHandler
+	onClose       func()
+
+	toolsMutex     sync.RWMutex
+	promptsMutex   sync.RWMutex
+	resourcesMutex sync.RWMutex
+	templatesMutex sync.RWMutex
+
+	logger shared.MCPLogger
 }
 
 func NewServer(ctx context.Context, serverInfo mcp.Implementation, options *ServerOptions) *Server {
@@ -92,8 +92,8 @@ func NewServer(ctx context.Context, serverInfo mcp.Implementation, options *Serv
 	s.SetNotificationHandler(shared.InitializedMethod, s.onInitialized)
 
 	if s.capabilities.Tools != nil {
-		s.SetRequestHandler(shared.ToolsListMethod, s.handleListTools)
-		s.SetRequestHandler(shared.ToolsCallMethod, s.handleCallTool)
+		s.SetRequestHandler(shared.ToolsListMethod, s.HandleListTools)
+		s.SetRequestHandler(shared.ToolsCallMethod, s.HandleCallTool)
 	}
 
 	if s.capabilities.Prompts != nil {
@@ -151,7 +151,7 @@ func (s *Server) OnInitialized(handler jsonrpc.NotificationHandler) {
 
 const maxListResults = 100
 
-func (s *Server) handleListTools(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+func (s *Server) HandleListTools(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	s.logger.Info("Handling list tools request from client: %v", request.Params)
 	toolList := make([]mcp.Tool, 0, len(s.tools))
 	for _, tool := range s.tools {
@@ -226,7 +226,7 @@ func (s *Server) handleListResources(ctx context.Context, request *jsonrpc.JSONR
 	}, nil
 }
 
-func (s *Server) handleCallTool(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
+func (s *Server) HandleCallTool(ctx context.Context, request *jsonrpc.JSONRPCRequest, extra jsonrpc.RequestHandlerExtra) (jsonrpc.Result, error) {
 	s.logger.Info("Handling call tool request from client: %v", request.Params)
 
 	if callParams, ok := request.Params.AdditionalProperties.(mcp.CallToolRequestParams); !ok {
@@ -363,7 +363,7 @@ func (s *Server) AddTool(
 	s.tools[name] = RegisteredTool{
 		Tool: mcp.Tool{
 			Name:        name,
-			Description: &description,
+			Description: description,
 			InputSchema: inputSchema,
 		},
 		Handler: handler,
@@ -421,8 +421,8 @@ func (s *Server) AddPrompts(promptsToAdd []RegisteredPrompt) error {
 func (s *Server) AddResource(
 	uri string,
 	name string,
-	description *string,
-	mimeType *string,
+	description string,
+	mimeType string,
 	readHandler func(mcp.ReadResourceRequestParams) mcp.ReadResourceResult,
 ) error {
 	if s.capabilities.Resources == nil {

@@ -10,6 +10,9 @@ import (
 	"github.com/nalbion/go-mcp/pkg/jsonrpc"
 )
 
+const ToolRequired = true
+const ToolNotRequired = false
+
 // Base for objects that include optional annotations for the client. The client
 // can use annotations to inform how objects are used or displayed
 type Annotated struct {
@@ -50,14 +53,14 @@ func (j *AnnotatedAnnotations) UnmarshalJSON(b []byte) error {
 }
 
 type BlobResourceContents struct {
+	ResourceContents
+
 	// A base64-encoded string representing the binary data of the item.
 	Blob string `json:"blob" yaml:"blob" mapstructure:"blob"`
+}
 
-	// The MIME type of this resource, if known.
-	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
-
-	// The URI of this resource.
-	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+func (j *BlobResourceContents) GetValue() string {
+	return j.Blob
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -1809,7 +1812,7 @@ type Prompt struct {
 	Arguments []PromptArgument `json:"arguments,omitempty" yaml:"arguments,omitempty" mapstructure:"arguments,omitempty"`
 
 	// An optional description of what this prompt provides
-	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
 
 	// The name of the prompt or prompt template.
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
@@ -1824,7 +1827,7 @@ type PromptArgument struct {
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
 
 	// Whether this argument must be provided.
-	Required *bool `json:"required,omitempty" yaml:"required,omitempty" mapstructure:"required,omitempty"`
+	Required bool `json:"required,omitempty" yaml:"required,omitempty" mapstructure:"required,omitempty"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -2021,6 +2024,14 @@ func (j *ReadResourceRequest) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+type TextOrBlobResourceContent any // TextResourceContents | BlobResourceContents
+
+type HasResourceContents interface {
+	GetMimeType() string
+	GetUri() string
+	GetValue() string
+}
+
 // The server's response to a resources/read request from the client.
 type ReadResourceResult struct {
 	// This result property is reserved by the protocol to allow clients and servers
@@ -2028,7 +2039,7 @@ type ReadResourceResult struct {
 	Meta ReadResourceResultMeta `json:"_meta,omitempty" yaml:"_meta,omitempty" mapstructure:"_meta,omitempty"`
 
 	// Contents corresponds to the JSON schema field "contents".
-	Contents []interface{} `json:"contents" yaml:"contents" mapstructure:"contents"`
+	Contents []HasResourceContents `json:"contents" yaml:"contents" mapstructure:"contents"`
 }
 
 // This result property is reserved by the protocol to allow clients and servers to
@@ -2103,17 +2114,17 @@ type Resource struct {
 	//
 	// This can be used by clients to improve the LLM's understanding of available
 	// resources. It can be thought of like a "hint" to the model.
-	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
 
 	// The MIME type of this resource, if known.
-	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
+	MimeType string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
 
 	// A human-readable name for this resource.
 	//
 	// This can be used by clients to populate UI elements.
 	Name string `json:"name" yaml:"name" mapstructure:"name"`
 
-	// The URI of this resource.
+	// The URI of this resource. https://, file://, git://
 	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
 }
 
@@ -2152,10 +2163,18 @@ func (j *ResourceAnnotations) UnmarshalJSON(b []byte) error {
 // The contents of a specific resource or sub-resource.
 type ResourceContents struct {
 	// The MIME type of this resource, if known.
-	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
+	MimeType string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
 
 	// The URI of this resource.
 	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+}
+
+func (j *ResourceContents) GetMimeType() string {
+	return j.MimeType
+}
+
+func (j *ResourceContents) GetUri() string {
+	return j.Uri
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -2597,6 +2616,9 @@ type ServerCapabilitiesTools struct {
 	ListChanged *bool `json:"listChanged,omitempty" yaml:"listChanged,omitempty" mapstructure:"listChanged,omitempty"`
 }
 
+// Alias for ServerCapabilitiesTools for backward compatibility
+type ServerToolsCapabilities = ServerCapabilitiesTools
+
 type ServerNotification interface{}
 
 type ServerRequest interface{}
@@ -2779,15 +2801,24 @@ func (j *TextContent) UnmarshalJSON(b []byte) error {
 }
 
 type TextResourceContents struct {
-	// The MIME type of this resource, if known.
-	MimeType *string `json:"mimeType,omitempty" yaml:"mimeType,omitempty" mapstructure:"mimeType,omitempty"`
+	ResourceContents
 
 	// The text of the item. This must only be set if the item can actually be
 	// represented as text (not binary data).
 	Text string `json:"text" yaml:"text" mapstructure:"text"`
+}
 
-	// The URI of this resource.
-	Uri string `json:"uri" yaml:"uri" mapstructure:"uri"`
+func NewTextResourceContents(text string, mimeType string) *TextResourceContents {
+	return &TextResourceContents{
+		ResourceContents: ResourceContents{
+			MimeType: mimeType,
+		},
+		Text: text,
+	}
+}
+
+func (j *TextResourceContents) GetValue() string {
+	return j.Text
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -2814,7 +2845,7 @@ func (j *TextResourceContents) UnmarshalJSON(b []byte) error {
 // Definition for a tool the client can call.
 type Tool struct {
 	// A human-readable description of the tool.
-	Description *string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
 
 	// A JSON Schema object defining the expected parameters for the tool.
 	InputSchema ToolInputSchema `json:"inputSchema" yaml:"inputSchema" mapstructure:"inputSchema"`
@@ -2835,7 +2866,14 @@ type ToolInputSchema struct {
 	Type string `json:"type" yaml:"type" mapstructure:"type"`
 }
 
-type ToolInputSchemaProperties map[string]map[string]interface{}
+// Property definition for a tool input schema
+type ToolInputSchemaProperty struct {
+	Type        string  `json:"type" yaml:"type" mapstructure:"type"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty" mapstructure:"description,omitempty"`
+	Required    *bool   `json:"required,omitempty" yaml:"required,omitempty" mapstructure:"required,omitempty"`
+}
+
+type ToolInputSchemaProperties map[string]ToolInputSchemaProperty
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *ToolInputSchema) UnmarshalJSON(b []byte) error {

@@ -20,6 +20,7 @@ import (
 type SSEClientTransport struct {
 	jsonrpc.BaseTransport
 
+	ctx              context.Context
 	client           *http.Client
 	url              *url.URL
 	reconnectionTime time.Duration
@@ -33,13 +34,23 @@ type SSEClientTransport struct {
 	baseUrl  string
 }
 
-func NewSSEClientTransport(client *http.Client, urlString string, reconnectionTime time.Duration, requestBuilder func(req *http.Request)) (*SSEClientTransport, error) {
+func NewDefaultSSEClientTransport(ctx context.Context, url string, reconnectionTime time.Duration) (*SSEClientTransport, error) {
+	client := http.DefaultClient
+	requestBuilder := func(req *http.Request) {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	return NewSSEClientTransport(ctx, client, url, reconnectionTime, requestBuilder)
+}
+
+func NewSSEClientTransport(ctx context.Context, client *http.Client, urlString string, reconnectionTime time.Duration, requestBuilder func(req *http.Request)) (*SSEClientTransport, error) {
 	parsedUrl, err := url.Parse(urlString)
 	if err != nil {
 		return nil, err
 	}
 
 	return &SSEClientTransport{
+		ctx:              ctx,
 		client:           client,
 		url:              parsedUrl,
 		reconnectionTime: reconnectionTime,
@@ -49,7 +60,7 @@ func NewSSEClientTransport(client *http.Client, urlString string, reconnectionTi
 	}, nil
 }
 
-func (s *SSEClientTransport) Start(ctx context.Context) error {
+func (s *SSEClientTransport) Start() error {
 	if s.initiated {
 		return errors.New("SSEClientTransport already started")
 	}
@@ -63,7 +74,7 @@ func (s *SSEClientTransport) Start(ctx context.Context) error {
 		defer s.job.Done()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-s.ctx.Done():
 				return
 			case event := <-s.session.Incoming():
 				switch string(event.Event) {
@@ -94,24 +105,24 @@ func (s *SSEClientTransport) Start(ctx context.Context) error {
 	}()
 
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-s.ctx.Done():
+		return s.ctx.Err()
 	case <-s.endpoint:
 		return nil
 	}
 }
 
-func (s *SSEClientTransport) Send(ctx context.Context, message jsonrpc.JSONRPCMessage) error {
+func (s *SSEClientTransport) Send(message jsonrpc.JSONRPCMessage) error {
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-s.ctx.Done():
+		return s.ctx.Err()
 	case endpoint := <-s.endpoint:
 		body, err := json.Marshal(message)
 		if err != nil {
 			return err
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBuffer(body))
+		req, err := http.NewRequestWithContext(s.ctx, http.MethodPost, endpoint, bytes.NewBuffer(body))
 		if err != nil {
 			return err
 		}
